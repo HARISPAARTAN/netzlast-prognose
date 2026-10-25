@@ -1,0 +1,14 @@
+.venv
+.git
+.github
+.pytest_cache
+.ruff_cache
+data/raw
+data/store
+data/fixtures/model
+runs
+models
+site
+log
+docs
+tests

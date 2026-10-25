@@ -23,3 +23,18 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
+
+  docker:
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t netzlast-prognose:ci .
+      - name: Smoke test /health and /forecast in demo mode
+        run: |
+          docker run -d --name smoke -p 8000:8000 netzlast-prognose:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/health && break; sleep 2; done
+          curl -sf http://127.0.0.1:8000/health | grep -q '"status":"ok"'
+          curl -sf "http://127.0.0.1:8000/forecast?target_date=2025-10-26" \
+            | python3 -c "import json, sys; assert len(json.load(sys.stdin)['points']) == 25"
+          docker rm -f smoke

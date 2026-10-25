@@ -163,3 +163,51 @@ def tune() -> None:
     s = _settings()
     out = run_tune(s, load_store(s), s.paths.results / "tuning-v1.json")
     typer.echo(json.dumps(out["best"]))
+
+
+@app.command()
+def train(
+    as_of: str = typer.Option(..., "--as-of", help="Issue day of the refit (first day of a month)"),
+    period: str = typer.Option(None, "--period", help="'fixtures' trains the demo model"),
+    out: Path = typer.Option(None, "--out", help="Output root (default: paths.models)"),
+    results: str = typer.Option("test-v1", "--results", help="Run id whose summary goes into the manifest"),
+) -> None:
+    """Fit the served model at origin --as-of and write <root>/<version>/ plus <root>/LATEST.
+
+    <root> is paths.models, or data/fixtures/model with --period fixtures (the demo model)."""
+    from .api import models_root
+    from .pipeline import load_store
+    from .service import train_model
+
+    s = _settings(period)
+    summary_path = s.paths.results / results / "summary.json"
+    test_metrics = {}
+    if summary_path.exists():
+        models = json.loads(summary_path.read_text(encoding="utf-8"))["models"]
+        test_metrics = {k: models[k] for k in ("lgbm_cqr", "naive_week") if k in models}
+    root = out or models_root(s)
+    model_dir = train_model(s, load_store(s), date.fromisoformat(as_of), root, test_metrics)
+    (Path(root) / "LATEST").write_text(model_dir.name + "\n", encoding="utf-8")
+    typer.echo(str(model_dir))
+
+
+@app.command()
+def forecast(
+    target_date: str = typer.Option(None, "--target-date"),
+    model: str = typer.Option("lgbm_cqr", "--model"),
+    max_missing_hours: int = typer.Option(0, "--max-missing-hours"),
+) -> None:
+    """Print the /forecast document for one target day."""
+    from .api import build_forecaster
+
+    fc = build_forecaster()
+    day = date.fromisoformat(target_date) if target_date else fc.default_target()
+    typer.echo(json.dumps(fc.forecast(day, model, max_missing_hours), indent=1))
+
+
+@app.command()
+def serve(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Run the API with uvicorn."""
+    import uvicorn
+
+    uvicorn.run("lastprog.api:app", host=host, port=port)

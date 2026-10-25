@@ -27,3 +27,11 @@ def fx_settings(settings):
 @pytest.fixture(scope="session")
 def fx_store(fx_settings):
     return Store.from_chunk_dir(fx_settings.paths.fixtures / "smard", fx_settings.data.region)
+
+
+@pytest.fixture(scope="session")
+def demo_model_dir(tmp_path_factory, fx_settings, fx_store):
+    """The demo model trained into a temporary directory (the repository does not hold model files)."""
+    from lastprog.service import train_model
+
+    return train_model(fx_settings, fx_store, fx_settings.demo_as_of, tmp_path_factory.mktemp("models"))

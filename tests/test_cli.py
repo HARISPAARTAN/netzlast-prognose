@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 import pytest
 import responses
@@ -42,3 +44,20 @@ def test_fetch_exits_non_zero_without_writing(online, tmp_path, kwargs):
 
 def _range():
     return pd.Timestamp("2025-10-01T00:00:00Z"), pd.Timestamp("2025-10-07T00:00:00Z")
+
+
+def test_train_fixtures_writes_model_and_latest_and_forecast_reads_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("LASTPROG_MODE", "demo")
+    res = CliRunner().invoke(
+        app, ["train", "--period", "fixtures", "--as-of", "2025-10-25", "--out", str(tmp_path)]
+    )
+    assert res.exit_code == 0, res.output
+    assert (tmp_path / "LATEST").read_text(encoding="utf-8").strip() == "2025.10.0"
+    manifest = json.loads((tmp_path / "2025.10.0" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == "2025.10.0" and set(manifest["psi_reference"]) == {
+        "lag_d1",
+        "lag_d6",
+        "d1_mean",
+        "d7_mean",
+    }
+    assert len(list((tmp_path / "2025.10.0").glob("q_*.txt"))) == 19
