@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -69,3 +71,51 @@ def repair_store() -> None:
 
     for name, n in repair_fetched_at(_settings().paths.store).items():
         typer.echo(f"{name}: {n} rows stamped")
+
+
+@app.command()
+def backtest(
+    run_id: str = typer.Option(..., "--run-id"),
+    period: str = typer.Option("validation", "--period", help="fixtures, validation or test"),
+    models: str = typer.Option(None, "--models", help="Comma-separated; default depends on the period"),
+    cutoff_rule: str = typer.Option(
+        None, "--cutoff-rule", help="local_midnight_of_issue_day or noon_of_previous_day"
+    ),
+    write_golden: bool = typer.Option(
+        False, "--write-golden", help="fixtures only: rewrite golden_metrics.json"
+    ),
+) -> None:
+    """Rolling-origin backtest; writes runs/<run_id>/."""
+    from .pipeline import PERIODS, default_models, execute_backtest, load_store
+
+    if period not in PERIODS:
+        raise typer.BadParameter(f"period must be one of {PERIODS}")
+    if write_golden and period != "fixtures":
+        raise typer.BadParameter("--write-golden needs --period fixtures")
+    s = _settings(period)
+    chosen = models.split(",") if models else default_models(period)
+    out = execute_backtest(s, load_store(s), run_id, period, chosen, cutoff_rule)
+    for name, m in out["summary"]["models"].items():
+        typer.echo(f"{name:15s} crps={m['crps']:10.2f} cov80={m['cov_80']:.3f} cov90={m['cov_90']:.3f}")
+    typer.echo(f"runtime {out['run']['runtime_s']} s -> {out['run_dir']}")
+    if write_golden:
+        golden = s.paths.fixtures / "golden_metrics.json"
+        text = json.dumps({"models": out["summary"]["models"]}, indent=1, sort_keys=True) + "\n"
+        golden.write_text(text, encoding="utf-8")
+        typer.echo(f"wrote {golden}")
+
+
+@app.command("publish-results")
+def publish_results(run_id: str = typer.Option(..., "--run-id")) -> None:
+    """Copy runs/<run_id>/{summary,run}.json to docs/results/<run_id>/ and write results.md there."""
+    from .evaluation import results_markdown
+
+    s = load_settings()
+    src, dst = s.paths.runs / run_id, s.paths.results / run_id
+    dst.mkdir(parents=True, exist_ok=True)
+    for name in ("summary.json", "run.json"):
+        shutil.copyfile(src / name, dst / name)
+    summary = json.loads((dst / "summary.json").read_text(encoding="utf-8"))
+    run = json.loads((dst / "run.json").read_text(encoding="utf-8"))
+    (dst / "results.md").write_text(results_markdown(summary, run), encoding="utf-8")
+    typer.echo(str(dst))

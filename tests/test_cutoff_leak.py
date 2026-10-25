@@ -1,0 +1,83 @@
+"""Every load value at or after the cut-off is replaced by a huge sentinel; nothing issued before may change."""
+
+from datetime import date, timedelta
+
+import numpy as np
+import pandas as pd
+import pandas.testing as pdt
+
+from lastprog.backtest import feature_spec, run_backtest
+from lastprog.features import FeatureSpec, build_features, city_weights_from_seed
+from lastprog.store import WX_COLUMNS, Store
+from lastprog.timekeys import cutoff_utc, day_index
+
+SENTINEL = 1e12
+LEAK_MODELS = ["naive_week", "naive_day", "mstl_ets", "lgbm_qr", "lgbm_cqr", "lgbm_cqr_dp", "lgbm_aci"]
+
+
+def test_features_are_bit_identical_under_masking(fx_settings, fx_store):
+    spec = feature_spec(fx_settings, False)
+    for origin in (date(2025, 10, 25), date(2025, 11, 2), date(2025, 11, 7)):
+        cutoff = cutoff_utc(origin)
+        masked = fx_store.with_observations_masked(cutoff, SENTINEL)
+        clean = build_features(fx_store, origin + timedelta(days=1), cutoff, spec)
+        dirty = build_features(masked, origin + timedelta(days=1), cutoff, spec)
+        pdt.assert_frame_equal(clean, dirty, check_exact=True)
+
+
+def test_forecasts_and_conformal_window_are_bit_identical(fx_settings, fx_store):
+    last = date(2025, 11, 4)
+    masked = fx_store.with_observations_masked(cutoff_utc(last), SENTINEL)
+    a = run_backtest(fx_settings, fx_store, date(2025, 11, 1), last, LEAK_MODELS)
+    b = run_backtest(fx_settings, masked, date(2025, 11, 1), last, LEAK_MODELS)
+    for model in LEAK_MODELS:
+        for origin, (idx, q) in a.outputs[model].items():
+            idx_b, q_b = b.outputs[model][origin]
+            assert idx.equals(idx_b)
+            np.testing.assert_array_equal(q, q_b, err_msg=f"{model} {origin}")
+
+
+def test_sentinel_would_be_detected(fx_settings, fx_store):
+    """Control: masking one hour *before* the cut-off must change the forecast, or the test proves nothing."""
+    last = date(2025, 11, 4)
+    early = fx_store.with_observations_masked(cutoff_utc(last) - pd.Timedelta(hours=1), SENTINEL)
+    a = run_backtest(fx_settings, fx_store, last, last, ["naive_day"])
+    b = run_backtest(fx_settings, early, last, last, ["naive_day"])
+    assert not np.array_equal(a.outputs["naive_day"][last][1], b.outputs["naive_day"][last][1])
+
+
+def _weather_store(fx_store, idx: pd.DatetimeIndex, cities: list[str], day1_value: float) -> Store:
+    rows = []
+    for city in cities:
+        for var in ("temperature_2m", "shortwave_radiation"):
+            for offset, value in ((2, 10.0), (1, day1_value)):
+                rows.append(
+                    pd.DataFrame(
+                        {
+                            "city": city,
+                            "ts_utc": idx,
+                            "variable": var,
+                            "offset_days": offset,
+                            "model": "best_match",
+                            "value": value,
+                            "fetched_at_utc": pd.Timestamp("2026-01-01T00:00:00Z"),
+                        }
+                    )
+                )
+    wx = pd.concat(rows, ignore_index=True)[WX_COLUMNS]
+    return Store(observations=fx_store.observations, weather=wx, region="DE")
+
+
+def test_weather_features_only_use_the_two_day_offset(fx_settings, fx_store):
+    weights = city_weights_from_seed(fx_settings.paths.seed)
+    spec = FeatureSpec(feature_spec(fx_settings, False).calendar, True, 2, weights)
+    target = date(2025, 11, 3)
+    idx = day_index(target)
+    clean = build_features(
+        _weather_store(fx_store, idx, list(weights), 99.0), target, cutoff_utc(date(2025, 11, 2)), spec
+    )
+    dirty = build_features(
+        _weather_store(fx_store, idx, list(weights), SENTINEL), target, cutoff_utc(date(2025, 11, 2)), spec
+    )
+    pdt.assert_frame_equal(clean, dirty, check_exact=True)
+    assert clean["wx_temp"].eq(10.0).all() and clean["wx_hdh"].eq(5.0).all()
