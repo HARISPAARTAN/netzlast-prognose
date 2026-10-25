@@ -1,0 +1,21 @@
+# Bevölkerung am 31.12.2025 nach Bundesländern (Spalte "Insgesamt"), Fortschreibung auf Grundlage des Zensus 2022.
+# Quelle: Statistisches Bundesamt (Destatis), Tabelle "Bevölkerung am 31.12.2025 nach Nationalität und Bundesländern", Stand 16. Juni 2026,
+# https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Bevoelkerung/Bevoelkerungsstand/Tabellen/bevoelkerung-nichtdeutsch-laender-basis-2022.html
+# Lizenz: "© Statistisches Bundesamt (Destatis), 2026. Vervielfältigung und Verbreitung, auch auszugsweise, mit Quellennachweis gestattet."
+code,name,population
+BW,Baden-Württemberg,11238761
+BY,Bayern,13245503
+BE,Berlin,3700577
+BB,Brandenburg,2551889
+HB,Bremen,706915
+HH,Hamburg,1869473
+HE,Hessen,6278594
+MV,Mecklenburg-Vorpommern,1573685
+NI,Niedersachsen,8000826
+NW,Nordrhein-Westfalen,17986214
+RP,Rheinland-Pfalz,4123022
+SL,Saarland,1007342
+SN,Sachsen,4026599
+ST,Sachsen-Anhalt,2120252
+SH,Schleswig-Holstein,2958519
+TH,Thüringen,2078946
