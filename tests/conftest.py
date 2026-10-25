@@ -11,6 +11,7 @@ os.environ.pop("LASTPROG_MODE", None)
 import pytest  # noqa: E402
 
 from lastprog.config import load_settings  # noqa: E402
+from lastprog.store import Store  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -21,3 +22,8 @@ def settings():
 @pytest.fixture(scope="session")
 def fx_settings(settings):
     return settings.for_fixtures()
+
+
+@pytest.fixture(scope="session")
+def fx_store(fx_settings):
+    return Store.from_chunk_dir(fx_settings.paths.fixtures / "smard", fx_settings.data.region)
