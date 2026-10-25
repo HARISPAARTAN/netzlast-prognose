@@ -5,9 +5,11 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 import pandas.testing as pdt
+import pytest
 
 from lastprog.backtest import feature_spec, run_backtest
 from lastprog.features import FeatureSpec, build_features, city_weights_from_seed
+from lastprog.service import Forecaster
 from lastprog.store import WX_COLUMNS, Store
 from lastprog.timekeys import cutoff_utc, day_index
 
@@ -103,3 +105,34 @@ def test_weather_features_only_use_the_two_day_offset(fx_settings, fx_store):
     )
     pdt.assert_frame_equal(clean, dirty, check_exact=True)
     assert clean["wx_temp"].eq(10.0).all() and clean["wx_hdh"].eq(5.0).all()
+
+
+# The service decides itself which actuals it may use (conformal window, naive_week residuals, `observed`),
+# so the cut-off needs its own guard on the served path (Task 6 review I-1).
+SERVICE_DAYS = [date(2025, 10, 26), date(2025, 11, 5)]  # a 25-hour DST day and an ordinary day
+
+
+@pytest.mark.parametrize("model", ["lgbm_cqr", "naive_week"])
+@pytest.mark.parametrize("target", SERVICE_DAYS)
+def test_served_forecast_is_identical_when_the_future_is_masked(
+    fx_settings, fx_store, demo_model_dir, target, model
+):
+    cutoff = cutoff_utc(target - timedelta(days=1))
+    masked = fx_store.with_observations_masked(cutoff, SENTINEL)
+    clean = Forecaster(fx_settings, fx_store, demo_model_dir).forecast(target, model)
+    dirty = Forecaster(fx_settings, masked, demo_model_dir).forecast(target, model)
+    assert clean == dirty
+    assert all(np.isfinite(p["median"]) for p in clean["points"])
+
+
+@pytest.mark.parametrize("model", ["lgbm_cqr", "naive_week"])
+def test_served_sentinel_control_one_hour_before_the_cutoff_changes_the_forecast(
+    fx_settings, fx_store, demo_model_dir, model
+):
+    target = SERVICE_DAYS[1]
+    early = fx_store.with_observations_masked(
+        cutoff_utc(target - timedelta(days=1)) - pd.Timedelta(hours=1), SENTINEL
+    )
+    clean = Forecaster(fx_settings, fx_store, demo_model_dir).forecast(target, model)
+    dirty = Forecaster(fx_settings, early, demo_model_dir).forecast(target, model)
+    assert clean != dirty

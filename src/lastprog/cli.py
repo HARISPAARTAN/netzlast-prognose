@@ -177,14 +177,14 @@ def train(
     <root> is paths.models, or data/fixtures/model with --period fixtures (the demo model)."""
     from .api import models_root
     from .pipeline import load_store
-    from .service import train_model
+    from .service import backtest_reference, train_model
 
     s = _settings(period)
     summary_path = s.paths.results / results / "summary.json"
     test_metrics = {}
     if summary_path.exists():
         models = json.loads(summary_path.read_text(encoding="utf-8"))["models"]
-        test_metrics = {k: models[k] for k in ("lgbm_cqr", "naive_week") if k in models}
+        test_metrics = backtest_reference(results, models)
     root = out or models_root(s)
     model_dir = train_model(s, load_store(s), date.fromisoformat(as_of), root, test_metrics)
     (Path(root) / "LATEST").write_text(model_dir.name + "\n", encoding="utf-8")

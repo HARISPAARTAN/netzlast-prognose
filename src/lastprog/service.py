@@ -10,6 +10,7 @@ therefore deterministic for (model version, target date, store snapshot).
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict
 from datetime import date, timedelta
@@ -25,13 +26,16 @@ from .models.baselines import residual_quantiles
 from .models.conformal import cqr_adjust
 from .models.lgbm import LgbmQuantile
 from .monitor import PSI_FEATURES, psi_reference
-from .pipeline import git_sha
+from .pipeline import PROTOCOL_TAG, git_sha
 from .store import Store
 from .timekeys import cutoff_utc, issue_time_utc, local_labels, utc_labels
 
 SERVED_MODELS = ("lgbm_cqr", "naive_week")
 ATTRIBUTION_SMARD = "Bundesnetzagentur | SMARD.de (CC BY 4.0)"
 ATTRIBUTION_OPEN_METEO = "Weather data by Open-Meteo.com (CC BY 4.0)"
+# Target days outside this range are a client error (pandas cannot represent them, date arithmetic overflows).
+SUPPORTED_DATES = (date(1900, 1, 1), date(2200, 12, 31))
+MAX_DATA_AGE_HOURS = 48
 
 
 class UnknownModel(KeyError):
@@ -50,8 +54,38 @@ class NoModel(RuntimeError):
     """503."""
 
 
+class ModelIntegrityError(RuntimeError):
+    """A model file does not match the sha256 recorded in its manifest."""
+
+
 def model_version(as_of: date) -> str:
     return f"{as_of.year}.{as_of.month:02d}.0"
+
+
+def file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def backtest_reference(run_id: str, models: dict) -> dict:
+    """The manifest's `test_metrics`: figures of a backtest run, labelled as such.
+
+    The served model is fitted through the end of the test period, so these are the out-of-sample figures of
+    the monthly-refit procedure (each month scored by the model fitted before it), not a holdout of this fit.
+    """
+    return {
+        "run_id": run_id,
+        "protocol": PROTOCOL_TAG,
+        "note": (
+            f"Figures of the pre-registered {run_id} backtest under {PROTOCOL_TAG} (rolling origin, monthly "
+            "refit, each month scored by the model fitted before it). They are not an evaluation of this "
+            "served model, which was trained through the test period."
+        ),
+        "metrics": {k: models[k] for k in ("lgbm_cqr", "naive_week") if k in models},
+    }
 
 
 def train_model(
@@ -89,6 +123,7 @@ def train_model(
     model = LgbmQuantile("lgbm_qr", taus, m.lgbm, m.seed, m.num_threads, spec.columns)
     model.fit(X, y)
     files = model.save(out_dir)
+    files_sha256 = {name: file_sha256(out_dir / name) for name in [*files, "calibration.parquet"]}
     manifest = {
         "name": "lgbm_cqr",
         "base": "lgbm_qr",
@@ -108,7 +143,9 @@ def train_model(
         "seed": m.seed,
         "num_threads": m.num_threads,
         "files": files,
+        "files_sha256": files_sha256,
         "git_sha": git_sha(settings.root),
+        "protocol_tag": PROTOCOL_TAG,
         "store_hash": store.snapshot(),
         "test_metrics": test_metrics or {},
         "psi_reference": {f: psi_reference(X[f].to_numpy("float64")) for f in PSI_FEATURES},
@@ -127,11 +164,15 @@ class Forecaster:
         self.model: LgbmQuantile | None = None
         self.calibration: dict[date, tuple[pd.DatetimeIndex, np.ndarray]] = {}
         self._raw_cache: dict[date, tuple[pd.DatetimeIndex, np.ndarray]] = {}
+        self._store_hash: str | None = None
         if model_dir is not None and (Path(model_dir) / "manifest.json").exists():
             self._load(Path(model_dir))
 
     def _load(self, model_dir: Path) -> None:
         self.manifest = json.loads((model_dir / "manifest.json").read_text(encoding="utf-8"))
+        for name, expected in self.manifest.get("files_sha256", {}).items():
+            if file_sha256(model_dir / name) != expected:
+                raise ModelIntegrityError(f"{name} in {model_dir} does not match the manifest sha256")
         m = self.settings.model
         self.model = LgbmQuantile(
             "lgbm_qr", self.taus, m.lgbm, m.seed, m.num_threads, self.manifest["features"]
@@ -190,6 +231,10 @@ class Forecaster:
             raise UnknownModel(model)
         if self.model is None:
             raise NoModel("no model loaded")
+        if not SUPPORTED_DATES[0] <= target_day <= SUPPORTED_DATES[1]:
+            raise BadRequest(
+                f"target_date must be between {SUPPORTED_DATES[0].isoformat()} and {SUPPORTED_DATES[1].isoformat()}"
+            )
         issue_day = target_day - timedelta(days=1)
         if issue_day < self.as_of:
             raise BadRequest(
@@ -269,20 +314,38 @@ class Forecaster:
             "attribution": attribution,
         }
 
+    def store_hash(self) -> str:
+        """Snapshot hash of the store this instance serves from (computed once per instance)."""
+        if self._store_hash is None:
+            self._store_hash = self.store.snapshot()
+        return self._store_hash
+
     def health(self, now: pd.Timestamp | None = None) -> dict:
+        """Status "ok" or "degraded" (no model, or in full mode no load data or data older than 48 h)."""
         last = self.store.last_observed("load_actual")
         last_s = None if last is None else last.strftime("%Y-%m-%dT%H:%M:%SZ")
+        problems = []
+        if self.model is None:
+            problems.append("no model loaded")
         if self.settings.mode == "demo":
             age = None
-            status = "ok" if self.model is not None else "degraded"
         else:
             now = now or pd.Timestamp.now(tz="UTC")
             age = None if last is None else round((now - last) / pd.Timedelta(hours=1), 1)
-            status = "ok" if (self.model is not None and age is not None and age <= 48) else "degraded"
+            if age is None:
+                problems.append("store holds no load data")
+            elif age > MAX_DATA_AGE_HOURS:
+                problems.append(f"newest load data is {age} h old (limit {MAX_DATA_AGE_HOURS} h)")
+        m = self.manifest or {}
         return {
-            "status": status,
+            "status": "degraded" if problems else "ok",
+            "problems": problems,
             "model": self.settings.model.headline if self.model is not None else None,
-            "model_version": self.manifest["version"] if self.manifest else None,
+            "model_version": m.get("version"),
+            "model_git_sha": m.get("git_sha"),
+            "model_store_hash": m.get("store_hash"),
+            "protocol_tag": m.get("protocol_tag"),
+            "store_hash": self.store_hash(),
             "data_last_ts_utc": last_s,
             "data_age_hours": age,
             "mode": self.settings.mode,
@@ -292,6 +355,21 @@ class Forecaster:
         if self.manifest is None:
             raise NoModel("no model loaded")
         m = self.manifest
+        ref = m.get("test_metrics") or {}
+        if "metrics" not in ref:  # manifest written before the run id was recorded
+            ref = {
+                "run_id": None,
+                "protocol": None,
+                "note": "Backtest figures of the refit procedure, not an evaluation of this served model.",
+                "metrics": ref,
+            }
+
+        def reference(name: str) -> dict:
+            return {
+                **{k: v for k, v in ref.items() if k != "metrics"},
+                "metrics": ref["metrics"].get(name, {}),
+            }
+
         return [
             {
                 "name": "lgbm_cqr",
@@ -299,7 +377,11 @@ class Forecaster:
                 "training_window": m["training_window"],
                 "trained_until": m["trained_until"],
                 "features": m["features"],
-                "test_metrics": m.get("test_metrics", {}).get("lgbm_cqr", {}),
+                "git_sha": m.get("git_sha"),
+                "store_hash": m.get("store_hash"),
+                "protocol_tag": m.get("protocol_tag"),
+                "files_sha256": m.get("files_sha256", {}),
+                "test_metrics": reference("lgbm_cqr"),
             },
             {
                 "name": "naive_week",
@@ -307,7 +389,8 @@ class Forecaster:
                 "training_window": None,
                 "trained_until": None,
                 "features": ["lag_d6"],
-                "test_metrics": m.get("test_metrics", {}).get("naive_week", {}),
+                "protocol_tag": m.get("protocol_tag"),
+                "test_metrics": reference("naive_week"),
             },
         ]
 

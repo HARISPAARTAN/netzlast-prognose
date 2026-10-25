@@ -12,3 +12,5 @@ site
 log
 docs
 tests
+.env
+**/__pycache__
