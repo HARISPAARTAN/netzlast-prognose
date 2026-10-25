@@ -3,6 +3,15 @@
 observations.parquet: series, filter_id, region, ts_utc, value, chunk_ts_ms, fetched_at_utc;
 unique (series, region, ts_utc). weather.parquet: city, ts_utc, variable, offset_days, model, value,
 fetched_at_utc; unique (city, ts_utc, variable, offset_days, model). Nulls stay nulls, never zero.
+
+fetched_at_utc is the UTC time (seconds) at which a row's value was first stored or last changed; upsert
+stamps new rows itself, keeps the stamp of rows whose value is unchanged and never leaves a NaT.
+
+Time semantics. Observations: ts_utc is the START of the hour, the value covers [t, t+1 h) (SMARD stamps).
+Weather (Open-Meteo, hourly, timezone GMT): instantaneous variables such as temperature_2m are the value AT
+ts_utc, but shortwave_radiation is the MEAN OF THE PRECEDING HOUR, i.e. it covers (t-1 h, t]. A feature that
+joins radiation to the load hour [t, t+1 h) must shift it by one hour (use the value stamped t+1 h) or state
+the convention explicitly. The stored values are not shifted. See docs/data-notes.md.
 """
 
 from __future__ import annotations
@@ -30,10 +39,14 @@ def _empty(columns: list[str]) -> pd.DataFrame:
     return df
 
 
+def _now() -> pd.Timestamp:
+    return pd.Timestamp.now(tz="UTC").floor("s")
+
+
 def _normalise(df: pd.DataFrame, columns: list[str], key: list[str]) -> pd.DataFrame:
     df = df.copy()
     if "fetched_at_utc" not in df:
-        df["fetched_at_utc"] = pd.Timestamp.now(tz="UTC").floor("s")
+        df["fetched_at_utc"] = _now()
     df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True).astype("datetime64[us, UTC]")
     df["fetched_at_utc"] = pd.to_datetime(df["fetched_at_utc"], utc=True).astype("datetime64[us, UTC]")
     df["value"] = df["value"].astype("float64")
@@ -41,17 +54,67 @@ def _normalise(df: pd.DataFrame, columns: list[str], key: list[str]) -> pd.DataF
     return df.sort_values(key, kind="mergesort").reset_index(drop=True)
 
 
+def _unchanged(new: pd.DataFrame, old: pd.DataFrame, key: list[str]) -> pd.Series:
+    """True for rows of `new` whose key exists in `old` with the same value (NaN equals NaN)."""
+    joined = new[key + ["value"]].merge(
+        old[key + ["value"]].drop_duplicates(subset=key, keep="last"),
+        on=key,
+        how="left",
+        suffixes=("", "_old"),
+        indicator=True,
+    )
+    same = (joined["value"] == joined["value_old"]) | (joined["value"].isna() & joined["value_old"].isna())
+    return pd.Series((joined["_merge"] == "both").to_numpy() & same.to_numpy(), index=new.index)
+
+
 def upsert(path: Path, new: pd.DataFrame, columns: list[str], key: list[str]) -> pd.DataFrame:
-    """Merge `new` into the Parquet file at `path`; newer rows win per key. Returns the merged frame."""
+    """Merge `new` into the Parquet file at `path`; newer rows win per key. Returns the merged frame.
+
+    New rows are stamped with the current time (unless they carry their own fetched_at_utc) before they are
+    concatenated. A row whose value is unchanged keeps the stamp already stored. Any NaT stamp left in the
+    old file (written by the earlier version) is stamped with the current time, so a normal fetch repairs it.
+    """
     path = Path(path)
-    old = pd.read_parquet(path) if path.exists() else None
-    merged = new if old is None else pd.concat([old, new], ignore_index=True)
+    now = _now()
+    new = new.copy()
+    if "fetched_at_utc" not in new:
+        new["fetched_at_utc"] = now
+    new["ts_utc"] = pd.to_datetime(new["ts_utc"], utc=True).astype("datetime64[us, UTC]")
+    new["fetched_at_utc"] = pd.to_datetime(new["fetched_at_utc"], utc=True).astype("datetime64[us, UTC]")
+    if path.exists():
+        old = pd.read_parquet(path)
+        old["fetched_at_utc"] = old["fetched_at_utc"].fillna(now)
+        new = new[~_unchanged(new, old, key).to_numpy()]
+        merged = pd.concat([old, new], ignore_index=True)
+    else:
+        merged = new
     merged = _normalise(merged, columns, key)
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_name(path.name + ".part")
     merged.to_parquet(part, index=False)
     part.replace(path)
     return merged
+
+
+def repair_fetched_at(store_dir: Path) -> dict[str, int]:
+    """One-off, idempotent repair of stores written before the stamp fix: stamp every NaT fetched_at_utc.
+
+    The stamp is the repair time, an upper bound of the true fetch time (the original time is lost).
+    Values are not touched, so the snapshot hash does not change. Returns the rows found per file.
+    """
+    fixed = {}
+    for name, columns, key in (
+        ("observations.parquet", OBS_COLUMNS, OBS_KEY),
+        ("weather.parquet", WX_COLUMNS, WX_KEY),
+    ):
+        path = Path(store_dir) / name
+        if not path.exists():
+            continue
+        df = pd.read_parquet(path)
+        fixed[name] = int(df["fetched_at_utc"].isna().sum())
+        if fixed[name]:
+            upsert(path, df.iloc[0:0], columns, key)
+    return fixed
 
 
 def snapshot_hash(df: pd.DataFrame, key: list[str]) -> str:

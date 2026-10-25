@@ -68,6 +68,10 @@ def select_chunks(timestamps: list[int], start_ms: int, end_ms: int) -> list[int
     return [ts for ts in sorted(timestamps) if ts <= end_ms and chunk_end_ms(ts) > start_ms]
 
 
+class SmardIndexError(RuntimeError):
+    """The SMARD index of a configured series is missing (404) or empty."""
+
+
 class SmardClient:
     def __init__(self, http: HttpClient, base_url: str, cache_dir: Path) -> None:
         self.http = http
@@ -129,6 +133,11 @@ class SmardClient:
     ) -> pd.DataFrame:
         """Download (or reuse) every chunk overlapping [start, end] and return the parsed rows."""
         index = self.fetch_index(filter_id, region, resolution)
+        if not index:
+            raise SmardIndexError(
+                f"{series}: SMARD index for filter {filter_id}, region {region}, resolution {resolution} "
+                "is missing (HTTP 404) or empty; nothing can be fetched"
+            )
         chosen = select_chunks(index, utc_to_ms(start), utc_to_ms(end))
         log.info("%s: %d chunks for %s .. %s", series, len(chosen), start, end)
         frames = [

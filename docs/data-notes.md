@@ -8,7 +8,9 @@
   `hour`, Einheit MWh je Stunde. Lizenz: CC BY 4.0, Nennung "Bundesnetzagentur | SMARD.de".
 - Open-Meteo Previous Runs API, Variablen `temperature_2m_previous_day2` und `shortwave_radiation_previous_day2`
   (Wert des Laufs 48 Stunden vor der Gültigkeitszeit), Daten ab 2024-01-20 12:00 UTC, acht Städte aus
-  `data/seed/staedte.csv`. Nur im Backtest. Lizenz: CC BY 4.0, "Weather data by Open-Meteo.com".
+  `data/seed/staedte.csv`. Nur im Backtest. Lizenz: CC BY 4.0, "Weather data by Open-Meteo.com"
+  (https://open-meteo.com/). Dokumentation: https://open-meteo.com/en/docs und
+  https://open-meteo.com/en/docs/previous-runs-api.
 - Destatis, Bevölkerung am 31.12.2025 nach Bundesländern (Stand 16. Juni 2026), Summe 83.467.117, als Gewichte für
   regionale Feiertage und Wetterpunkte. "© Statistisches Bundesamt (Destatis), 2026. Vervielfältigung und
   Verbreitung, auch auszugsweise, mit Quellennachweis gestattet."
@@ -50,3 +52,30 @@ Wert von Filter 410 wurde im Diagramm nicht gegengelesen.
 - Wetter: 8 Aufrufe (eine Stadt je Aufruf, 2024-01-01 bis 2026-09-30), Rohcache 5,9 MB, `weather.parquet` 1,4 MB,
   385.536 Zeilen (8 Städte, 2 Variablen, 2024-01-01 00:00 bis 2026-09-30 23:00 UTC), 1,94 % fehlende Werte (vor dem
   Datenbeginn am 2024-01-20).
+
+## Zeitstempel der Variablen
+
+- SMARD: `ts_utc` ist der Beginn der Stunde in UTC, der Wert gilt für [t, t+1 h). Der Chart-Check (Montag
+  12:00 bis 13:00 Ortszeit) bestätigt das.
+- Wetter (Open-Meteo, `timezone=GMT`): Momentanwerte wie `temperature_2m` gelten zum gestempelten Zeitpunkt t.
+  `shortwave_radiation` ist dagegen das Mittel der vorangegangenen Stunde und gilt für (t-1 h, t]. Die Doku
+  (https://open-meteo.com/en/docs, abgerufen 2026-10-25) sagt: "Most weather variables are given as an
+  instantaneous value for the indicated hour", `shortwave_radiation` hat die Gültigkeit "Preceding hour mean"
+  ("Shortwave solar radiation as average of the preceding hour"). Das ist bestätigt, für die `_previous_day2`-
+  Variante gilt dieselbe Definition (nicht separat geprüft, die Doku führt keine abweichende auf).
+- Folge für die Merkmale: Die Last der Stunde [t, t+1 h) und die Strahlung desselben Zeitraums liegen im Store
+  bei `ts_utc` t+1 h. Die Merkmalsaufgabe muss die Strahlung um eine Stunde verschieben (Wert von t+1 h für die
+  Lastzeile t) oder die Konvention ausdrücklich festhalten. Die gespeicherten Daten sind unverändert.
+- Warum zwei Tage Vorlauf (`previous_day2`) und nicht einen: Die Prognose wird um 07:00 UTC an Tag D für den
+  lokalen Tag D+1 erstellt (bis etwa 40 Stunden Vorlauf), Informationsstand ist lokal Mitternacht von D. Ein
+  `previous_day1`-Wert für den Abend von D+1 stammt aus einem Lauf nach diesem Stichtag und wäre ein Leck.
+- Lücke in 411: die 24 fehlenden Stunden sind der lokale Tag 2020-01-31 (2020-01-30 23:00 bis 2020-01-31 22:00 UTC).
+
+## Abrufzeit und Reparatur
+
+- `fetched_at_utc` ist der Zeitpunkt, an dem ein Wert zuerst gespeichert oder zuletzt geändert wurde. `upsert` stempelt
+  neue Zeilen selbst, unveränderte Zeilen behalten ihren Stempel, ein NaT entsteht nicht mehr.
+- Ein vor dieser Korrektur geschriebener Store hat NaT bei 411 (und bei jedem späteren Update). Einmalige,
+  idempotente Reparatur: `uv run lastprog repair-store` (setzt die Reparaturzeit als Stempel, die echte Abrufzeit
+  ist nicht mehr bekannt; Werte und Snapshot-Hash bleiben gleich). Ein normaler `fetch` repariert ebenfalls.
+- Ein fehlender oder leerer SMARD-Index (HTTP 404) lässt `lastprog fetch` mit Fehlermeldung und Exit-Code 1 enden.

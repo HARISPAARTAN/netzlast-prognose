@@ -54,6 +54,8 @@ aci_gamma = 0.005
 enabled = false
 api = "previous-runs"
 base_url = "https://previous-runs-api.open-meteo.com/v1/forecast"
+# Two days, not one: issue 07:00 UTC on D for day D+1 (up to ~40 h lead), cut-off local midnight of D; a
+# previous_day1 value for the evening of D+1 comes from a run issued after the cut-off and would leak.
 offset_days = 2
 variables = ["temperature_2m", "shortwave_radiation"]
 start = "2024-01-01"

@@ -44,14 +44,28 @@ def fetch(
 ) -> None:
     """Download SMARD 410/411 (DE, hour) into data/raw and data/store."""
     from .ingest import fetch_smard, fetch_weather
+    from .smard import SmardIndexError
 
     _setup_logging()
     s = _settings()
     start = date.fromisoformat(from_) if from_ else s.data.history_start
     end = date.fromisoformat(to) if to else None
-    calls = fetch_smard(s, start, end, raw_dir)
+    try:
+        calls = fetch_smard(s, start, end, raw_dir)
+    except SmardIndexError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
     typer.echo(f"smard: {calls} HTTP calls")
     if weather:
         wx_end = end or s.backtest.test[1]
         calls = fetch_weather(s, s.weather.start, wx_end)
         typer.echo(f"open-meteo: {calls} HTTP calls")
+
+
+@app.command("repair-store")
+def repair_store() -> None:
+    """One-off: stamp rows with a missing fetched_at_utc in data/store (idempotent, values unchanged)."""
+    from .store import repair_fetched_at
+
+    for name, n in repair_fetched_at(_settings().paths.store).items():
+        typer.echo(f"{name}: {n} rows stamped")

@@ -1,6 +1,13 @@
 """Open-Meteo Previous Runs client (weather data by Open-Meteo.com, CC BY 4.0), backtest only.
 
 `{variable}_previous_day2` is "the value that was predicted 48 hours before valid time" (Open-Meteo docs).
+Why two days and not one: the forecast is issued at 07:00 UTC on day D for local day D+1 (up to about 40 h
+lead) with information cut-off at local midnight of D; a `previous_day1` value for the evening of D+1 comes
+from a run issued after that cut-off and would leak, a `previous_day2` value does not.
+Timestamps (timezone=GMT): instantaneous variables (temperature_2m) are the value AT the stamped hour;
+shortwave_radiation is the MEAN OF THE PRECEDING HOUR, covering (t-1 h, t]. Stored as delivered, not shifted.
+Documentation: https://open-meteo.com/en/docs and https://open-meteo.com/en/docs/previous-runs-api
+Weather data by Open-Meteo.com (https://open-meteo.com/), CC BY 4.0.
 Requests: {base}?latitude=..&longitude=..&hourly=temperature_2m_previous_day2,shortwave_radiation_previous_day2
 &start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&timezone=GMT -> {"hourly": {"time": [...], "<var>": [...]}}.
 One request per city; responses are cached under data/raw/openmeteo/.

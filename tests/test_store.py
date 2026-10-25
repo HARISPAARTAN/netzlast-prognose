@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from lastprog.store import OBS_COLUMNS, OBS_KEY, Store, upsert
+from lastprog.store import OBS_COLUMNS, OBS_KEY, Store, repair_fetched_at, upsert
 
 
 def _rows(values, start="2025-10-19T22:00:00Z", series="load_actual"):
@@ -47,3 +47,35 @@ def test_masking_only_touches_load_after_cutoff(fx_store):
     assert (s[s.index >= cutoff] == 1e12).all()
     assert (s[s.index < cutoff] == fx_store.series("load_actual")[s.index < cutoff]).all()
     assert masked.series("load_tso_forecast").equals(fx_store.series("load_tso_forecast"))
+
+
+def test_upsert_stamps_new_rows_and_never_writes_nat(tmp_path):
+    path = tmp_path / "observations.parquet"
+    first = upsert(path, _rows([1.0, 2.0]), OBS_COLUMNS, OBS_KEY)
+    assert first["fetched_at_utc"].notna().all()
+    stamp = pd.Timestamp("2025-01-01T00:00:00Z")
+    old = pd.read_parquet(path).assign(fetched_at_utc=stamp)
+    old.to_parquet(path, index=False)
+    # Re-run with identical rows plus one new and one changed row: no NaT anywhere.
+    rerun = upsert(path, _rows([1.0, 5.0, 3.0]), OBS_COLUMNS, OBS_KEY)
+    assert rerun["fetched_at_utc"].notna().all()
+    stamps = dict(zip(rerun["value"], rerun["fetched_at_utc"], strict=True))
+    assert stamps[1.0] == stamp  # unchanged row keeps its stamp
+    assert stamps[5.0] > stamp and stamps[3.0] > stamp  # changed and new rows are stamped now
+    # A different series written later (the load_tso_forecast case) is stamped too.
+    other = upsert(path, _rows([7.0], series="load_tso_forecast"), OBS_COLUMNS, OBS_KEY)
+    assert other["fetched_at_utc"].notna().all()
+    assert pd.read_parquet(path)["fetched_at_utc"].notna().all()
+
+
+def test_repair_fetched_at_is_idempotent_and_keeps_values(tmp_path):
+    path = tmp_path / "observations.parquet"
+    upsert(path, _rows([1.0, np.nan, 3.0]), OBS_COLUMNS, OBS_KEY)
+    broken = pd.read_parquet(path)
+    broken["fetched_at_utc"] = pd.Series(pd.NaT, index=broken.index, dtype="datetime64[us, UTC]")
+    broken.to_parquet(path, index=False)
+    before = Store.load(tmp_path).snapshot()
+    assert repair_fetched_at(tmp_path) == {"observations.parquet": 3}
+    assert pd.read_parquet(path)["fetched_at_utc"].notna().all()
+    assert repair_fetched_at(tmp_path) == {"observations.parquet": 0}
+    assert Store.load(tmp_path).snapshot() == before
