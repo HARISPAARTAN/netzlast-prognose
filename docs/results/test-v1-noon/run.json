@@ -1,0 +1,69 @@
+{
+ "run_id": "test-v1-noon",
+ "command": "lastprog backtest --run-id test-v1-noon --period test --models lgbm_cqr,naive_week --cutoff-rule noon_of_previous_day",
+ "period": [
+  "2024-10-01",
+  "2026-09-30"
+ ],
+ "models": [
+  "lgbm_cqr",
+  "naive_week"
+ ],
+ "cutoff_rule": "noon_of_previous_day",
+ "git_sha": "91470fc764a81507332c9857203e8e09f8a21d49",
+ "git_dirty": false,
+ "protocol_v1": true,
+ "config_hash": "c560f7dd38433589d6358ddb6cc44342e0c11ebd5a0bc872394dc2941eee3bb1",
+ "store_hash": "5a0c9ddb2597823fb53b28cda64c9e8cadd1a2e91a21f1991e13c1c202d1488d",
+ "seed": 20261025,
+ "num_threads": 4,
+ "lgbm": {
+  "n_estimators": 200,
+  "learning_rate": 0.1,
+  "num_leaves": 63,
+  "min_child_samples": 100,
+  "feature_fraction": 0.9,
+  "lambda_l2": 1.0
+ },
+ "fits": {
+  "lgbm_qr": [
+   "2024-08-05",
+   "2024-09-01",
+   "2024-10-01",
+   "2024-11-01",
+   "2024-12-01",
+   "2025-01-01",
+   "2025-02-01",
+   "2025-03-01",
+   "2025-04-01",
+   "2025-05-01",
+   "2025-06-01",
+   "2025-07-01",
+   "2025-08-01",
+   "2025-09-01",
+   "2025-10-01",
+   "2025-11-01",
+   "2025-12-01",
+   "2026-01-01",
+   "2026-02-01",
+   "2026-03-01",
+   "2026-04-01",
+   "2026-05-01",
+   "2026-06-01",
+   "2026-07-01",
+   "2026-08-01",
+   "2026-09-01"
+  ],
+  "naive_week": []
+ },
+ "runtime_s": 198.1,
+ "versions": {
+  "python": "3.13.11",
+  "lightgbm": "4.7.0",
+  "statsforecast": "2.1.1",
+  "numpy": "2.4.6",
+  "pandas": "2.3.3",
+  "holidays": "0.107",
+  "scipy": "1.18.1"
+ }
+}

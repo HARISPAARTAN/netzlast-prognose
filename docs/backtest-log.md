@@ -25,3 +25,6 @@ Jeder Eintrag: Datum (UTC), Lauf, was geschah, warum. Abweichungen vor `protocol
 |---|---|---|
 | 2026-10-25 | val-v1 | Baselines und LightGBM auf dem Validierungsjahr bewertet (vor dem Tag), Ausgangswerte der Hyperparameter, Laufzeit 242 s. |
 | 2026-10-25 | tuning-v1 | 12 Einstellungen bewertet (Summe der Laufzeiten 1376 s); beste Einstellung 5 (63 Blätter, Lernrate 0,1, 200 Bäume, 100 Mindestproben, Pinball 590,997) eingefroren. |
+| 2026-10-25 | test-v1 | Tag `protocol-v1` (Commit 91470fc) gepusht, danach Testzeitraum mit 9 Modellen bewertet; Laufzeit 694 s, `protocol_v1: true`, Arbeitsbaum sauber. |
+| 2026-10-25 | test-v1-noon | Sensitivitätslauf `noon_of_previous_day` mit `lgbm_cqr` und `naive_week`; Laufzeit 198 s. |
+| 2026-10-25 | test-v1-noon-rerun | Wiederholung von test-v1-noon auf demselben Store; `summary.json` identisch (byte-gleich); Laufzeit 259 s. |
