@@ -101,3 +101,15 @@ def test_aci_adjust_on_empty_window_is_all_nan():
     aci = AdaptiveConformal(TAUS, gamma=0.05)
     out = aci.adjust(_base_grid(2, 1.0), np.empty((0, 19)), np.empty(0))
     assert np.isnan(out).all() and unadjusted_rows(out) == 2
+
+
+def test_aci_update_ignores_rows_with_nan_forecasts():
+    """A NaN forecast row is missing, never a hit: it must not move alpha."""
+    aci = AdaptiveConformal(TAUS, gamma=0.05)
+    before = dict(aci.alpha)
+    aci.update(np.full((24, 19), np.nan), np.full(24, 5.0))
+    assert aci.alpha == before
+    q = _base_grid(24, 0.1)
+    q[:12] = np.nan  # half the rows unusable, the other half all missed
+    aci.update(q, np.full(24, 5.0))
+    assert aci.alpha[0] < before[0]

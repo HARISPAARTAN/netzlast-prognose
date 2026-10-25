@@ -109,7 +109,7 @@ class AdaptiveConformal:
         self.alpha = {lo: 1.0 - level for lo, _hi, level in pairs(taus)}
 
     def update(self, q_prev: np.ndarray, y_prev: np.ndarray) -> None:
-        ok = ~np.isnan(y_prev)
+        ok = ~np.isnan(y_prev) & ~np.isnan(q_prev).any(axis=1)  # a NaN row is missing, never a hit
         if not ok.any():
             return
         for lo, hi, level in pairs(self.taus):
