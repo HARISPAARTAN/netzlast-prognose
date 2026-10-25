@@ -47,9 +47,20 @@ Zeitumstellung und Weihnachtswoche): Weihnachtswoche (CRPS 1,790.5, n = 384), Fe
 SMARD Filter 410 (DE, stündlich) ab 2018; Evaluation als rollierender Backtest mit täglichen Ursprüngen, Protokoll
 vor der Auswertung eingefroren (`protocol-v1`).
 
+Belege: Die Ausgaben je Ursprung der Läufe (test-v1, test-v1-noon, die Wiederholung und val-v1), die Daten des
+Protokollfensters als Parquet-Auszug und die Prüfsummen (`SHA256SUMS`) liegen als Assets am GitHub-Release v0.1.0.
+Die Kennzahlen dieser Karte lassen sich daraus mit `scripts/recompute_headline.py` neu berechnen; die Daten prüft
+`scripts/window_digest.py`. Befehle und der Stand der Prüfung (der Hash des Gesamtstores von damals ist nicht mehr
+nachprüfbar) stehen in `docs/backtest.md`, Abschnitt "Belege und Nachprüfung".
+
 ## Hinweise und bekannte Schwächen
 
 - Keine Schulferien als Merkmal.
+- Datenstand der Serie 410: Der Backtest liest den SMARD-Verlauf, wie er am 2026-10-25 abgerufen wurde, also
+  womöglich nachträglich revidierte Werte. SMARD kann die Last der letzten Tage und Wochen nach der
+  Erstveröffentlichung ändern; der Live-Betrieb sieht dagegen die Erstveröffentlichung, zwei Stunden alt. Der
+  Backtest ist deshalb bezüglich der Datenfassung nur näherungsweise Echtzeit. Wie groß die Revisionen sind, wurde
+  nicht gemessen.
 - Konforme Kalibrierung ohne Austauschbarkeit: Abdeckung kann in Regimewechseln abweichen (siehe Monatswerte).
 - Feiertage mit kleinem Bevölkerungsanteil und Brückentage sind selten; die Schätzungen dort sind unsicher.
 - Die Referenz der Netzbetreiber ist im Mittel schlechter (CRPS 1,355.9 gegen 1,201.6). Sie beruht auf SMARD
@@ -82,8 +93,9 @@ vor der Auswertung eingefroren (`protocol-v1`).
 
 Die ausgelieferten Modelldateien (Version 2026.10.0) stammen aus dem Refit-Workflow auf einem GitHub-Runner
 (`ubuntu-24.04`), nicht aus einem lokalen Lauf. Ein lokales Nachtraining mit demselben Code, denselben Merkmalen,
-Zeilen und Fenstern (`--as-of 2026-10-01`, Windows 11) liefert andere Dateien: keine der 20 Modelldateien ist
-byte-gleich, die Kalibrierungswerte weichen um bis zu 1,6 % ab, der Median liegt bei Stunde 12 innerhalb von 0,2 %.
+Zeilen und Fenstern (`--as-of 2026-10-01`, Windows 11) liefert Dateien, die nicht byte-gleich sind. Wie groß die Abweichung der Vorhersagen ist, wurde nicht in den
+Unterlagen dieses Repositorys festgehalten und wird deshalb hier nicht beziffert. Plattform, Python- und
+LightGBM-Version des ausgelieferten Builds stehen in `models/refit-log.csv` (Zeile 2026.10.0).
 Die Ursache ist nicht nachgewiesen; die wahrscheinlichste Erklärung ist die Plattform (Betriebssystem, Bibliotheks-
 builds), geprüft wurde das nicht. Deshalb halten Manifest und `models/refit-log.csv` ab der nächsten Neuschätzung
 Plattform, Python-, LightGBM- und NumPy-Version, die Actions-Lauf-URL und einen Digest der tatsächlich gelesenen

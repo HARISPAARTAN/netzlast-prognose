@@ -1,0 +1,20 @@
+{
+ "window_end_utc_exclusive": "2026-10-01T22:00:00Z",
+ "observations": {
+  "series": [
+   "load_actual",
+   "load_tso_forecast"
+  ],
+  "rows": 153406,
+  "first_ts_utc": "2017-12-31 23:00:00+00:00",
+  "last_ts_utc": "2026-10-01 21:00:00+00:00",
+  "sha256": "b33b3d0ec1e55d789be1540440874e49f88bd5a40f0c868dd15fa8c56e1e916a"
+ },
+ "weather": {
+  "rows": 385536,
+  "first_ts_utc": "2024-01-01 00:00:00+00:00",
+  "last_ts_utc": "2026-09-30 23:00:00+00:00",
+  "sha256": "de4978ea0af5031c5cd07e6bf6eefb307e39e08d57b1c215a8ad506c1f4c15b5"
+ },
+ "combined_sha256": "9585ddc40c7d6b5ab0cb3a633b4a6f1f9765e4b9dcb1dc262a27a1c99001ff60"
+}

@@ -36,8 +36,13 @@ Ergebnisse ist vernachlässigbar (`docs/backtest-log.md`).
 | test-v1 | 2024-10-01 bis 2026-09-30 | naive_week, naive_day, mstl_ets, lgbm_qr, lgbm_cqr, lgbm_cqr_dp, lgbm_aci, tso_reference, lgbm_cqr_wx | `lastprog backtest --run-id test-v1 --period test` | `91470fc764` | `5a0c9ddb2597` | 693.9 s |
 | test-v1-noon | 2024-10-01 bis 2026-09-30 | lgbm_cqr, naive_week | `lastprog backtest --run-id test-v1-noon --period test --models lgbm_cqr,naive_week --cutoff-rule noon_of_previous_day` | `91470fc764` | `5a0c9ddb2597` | 198.1 s |
 
+Der Store-Hash `5a0c9ddb2597` ist der Hash des gesamten Stores zum Zeitpunkt dieser Läufe. Er ist der damalige
+Wert und lässt sich nicht mehr prüfen: der Store wurde danach neu geschrieben (siehe "Belege und Nachprüfung").
+
 Wiederholungslauf `test-v1-noon-rerun`: `summary.json` identisch mit `test-v1-noon` (byte-gleich, Vergleich der
-geladenen JSON-Objekte und der Dateien). `val-v1` entstand vor dem Tuning mit den Ausgangswerten der
+geladenen JSON-Objekte und der Dateien; ebenso `forecasts.parquet`, `points.parquet` und `metrics.parquet`, siehe
+`SHA256SUMS-contents.txt`). Das ist der einzige Wiederholungslauf: zwei Modelle (`lgbm_cqr`, `naive_week`),
+12:00-Regel, derselbe Rechner. `val-v1` entstand vor dem Tuning mit den Ausgangswerten der
 Hyperparameter (Git-SHA vor dem Einfrieren); `test-v1` und `test-v1-noon` laufen mit dem getaggten Stand
 (`protocol_v1: true`, `git_dirty: false` in `run.json`).
 
@@ -61,6 +66,10 @@ Git SHA: `91470fc764a81507332c9857203e8e09f8a21d49` · store snapshot: `5a0c9ddb
 | naive_week | 2,071.1 | 1,090.0 | 2,781.7 | 4,107.5 | 5.287 | 1.000 | 0.487 | 0.774 | 0.863 | 7,961.0 | 14,831.4 | 730 |
 | naive_day | 4,532.2 | 2,385.4 | 6,217.4 | 8,077.8 | 11.954 | 2.235 | 0.501 | 0.800 | 0.897 | 22,272.4 | 28,891.8 | 730 |
 | tso_reference | 1,355.9 | 713.7 | 1,893.4 | 2,459.0 | 3.589 | 0.681 | 0.470 | 0.770 | 0.870 | 5,715.7 | 8,804.9 | 730 |
+
+Die Zeile `lgbm_cqr_wx` ist über alle 730 Ursprünge gepoolt, auch über die ersten Monate, in denen das Wetter nur für
+einen Teil der Trainingszeilen vorliegt. Sie ist nicht der Vergleich von H3 und wird nicht zitiert; der Vergleich mit
+`lgbm_cqr` gilt nur für die 638 Ursprünge ab 2025-01-01 (CRPS 1,118.3 gegen 1,201.8, siehe Kurzfassung).
 
 | model | rows | excluded (NaN target or quantile) | unadjusted (NaN grid) | missing target |
 |---|---:|---:|---:|---:|
@@ -286,11 +295,80 @@ Wochentag 0 = Montag; Monate nach Zieltag. Feiertag: Bevölkerungsanteil ≥ 0.5
   nominalen Regel, kein Informationsleck (Protokoll, Abweichung 4; Details in `docs/data-notes.md`). Die
   Temperatur überschreitet den Stichtag nie.
 
+## Belege und Nachprüfung
+
+Die Ausgaben je Ursprung der Läufe lagen zunächst nur im git-ignorierten Ordner `runs/` des Rechners, auf dem sie
+entstanden. Sie liegen jetzt als Assets am GitHub-Release
+[v0.1.0](https://github.com/HARISPAARTAN/netzlast-prognose/releases/tag/v0.1.0), nachträglich hochgeladen am
+2026-10-25 (der Code-Tag bleibt v0.1.0):
+
+| Asset | Inhalt | Größe in Byte | SHA-256 |
+|---|---|---:|---|
+| `runs-test-v1.tar.gz` | `runs/test-v1/`: `forecasts`, `points`, `metrics` (Parquet), `run.json`, `summary.json` | 35,503,656 | `961323c02d0f4e992af2b27be70dc68e36cd46ac40409385fe88c766466a9b05` |
+| `runs-test-v1-noon.tar.gz` | dasselbe für `test-v1-noon` | 7,982,492 | `ddbdc21610a8a6c621bb6403b843ce159816a72ece1e3f650d2919a63b13252a` |
+| `runs-test-v1-noon-rerun.tar.gz` | dasselbe für `test-v1-noon-rerun` | 7,982,517 | `abffb5ebdc85f14092f077a718222431f8e3c73259e96ad267699f61e51590e2` |
+| `runs-val-v1.tar.gz` | dasselbe für `val-v1` | 14,405,489 | `f8f53392480e04b828f1bfb7d1938581dbab10d871ec43d4bb730db23864ba61` |
+| `data-window-v1.tar.gz` | Parquet-Auszug des Protokollfensters (`observations.parquet`, `weather.parquet`) und `window-digest.json` | 2,682,996 | `a03d80c64d019675e9f1da85f5f3e859ab2948a18b9c37701234859f251e0775` |
+| `SHA256SUMS` | Prüfsummen der fünf Archive und von `SHA256SUMS-contents.txt` | 537 | siehe Release |
+| `SHA256SUMS-contents.txt` | Prüfsummen aller Dateien in den Archiven | 2,284 | `e9e90216bd8f7c45b4af531e9e38287ef3ac6ced79e59943bfa33a1dfd51dda0` |
+
+Jedes Archiv enthält `ATTRIBUTION.txt` (Daten: "Bundesnetzagentur | SMARD.de", CC BY 4.0; "Weather data by
+Open-Meteo.com", CC BY 4.0). Das Tuning (`tuning-v1`) hat keine Ausgaben je Ursprung; sein Ergebnis steht vollständig
+in `docs/results/tuning-v1.json`.
+
+**Datenstand.** Der Hash des Gesamtstores `5a0c9ddb2597…` in der Lauftabelle und in `docs/results/*/run.json` ist der
+Wert zum Zeitpunkt der Läufe. Er ist nicht mehr nachprüfbar: der Store wurde am 2026-10-25 um 10:33 durch den Abruf
+für den Live-Betrieb neu geschrieben (der letzte Chunk wurde neu geladen, der Gesamtstore hat heute einen anderen
+Hash), und der damalige Stand lässt sich nicht Bit für Bit wiederherstellen. Als Ersatz gibt es einen Digest, der nur
+die Zeilen im Protokollfenster erfasst:
+
+- Fenster: Last (Filter 410, `load_actual`), Referenz (Filter 411, `load_tso_forecast`) und Wetter, jeweils mit
+  `ts_utc` vor 2026-10-01 22:00 UTC (Ende der letzten bewerteten Stunde), ab dem Beginn des Stores.
+- Kanonische Serialisierung: je Zeile `Serie|Region|Zeit|Wert` (Wetter: `Stadt|Variable|Offset|Modell|Zeit|Wert`), Zeit
+  als `YYYY-MM-DDTHH:MM:SSZ`, Wert als Python-`repr` oder `nan`, nach Schlüssel sortiert, SHA-256 über die UTF-8-Bytes;
+  `fetched_at_utc` zählt nicht mit. Einzelheiten im Kopf von `scripts/window_digest.py`.
+- Digest des Fensters (berechnet nach den Läufen, am 2026-10-25, auf dem Store von 10:33):
+  `9585ddc40c7d6b5ab0cb3a633b4a6f1f9765e4b9dcb1dc262a27a1c99001ff60`
+  (Last und Referenz `b33b3d0ec1e55d789be1540440874e49f88bd5a40f0c868dd15fa8c56e1e916a`, 153,406 Zeilen; Wetter
+  `de4978ea0af5031c5cd07e6bf6eefb307e39e08d57b1c215a8ad506c1f4c15b5`, 385,536 Zeilen). Die Ausgabe des Skripts steht in
+  `docs/results/window-digest.json`.
+
+Das ist ein nachträglich berechneter Wert, kein Wert aus den Läufen. Er beweist nicht, dass der Store zur Laufzeit
+dieselben Zeilen hatte; SMARD kann Werte der letzten Tage und Wochen revidieren, und spätere Abrufe können Zeilen im
+Fenster ändern. Geprüft ist, dass die beobachteten Werte `y` aller bewerteten Stunden in den Ausgaben (17,520 Stunden in
+test-v1, 8,784 in val-v1) mit `load_actual` des Auszugs übereinstimmen und dass die Kennzahlen aus den Ausgaben
+reproduzierbar sind. Wer den Digest später auf einem frisch abgerufenen Store berechnet, kann abweichen, wenn SMARD
+in der Zwischenzeit revidiert hat; das Archiv ist dann die Referenz.
+
+**Nachprüfen** (Git Bash im Repository nach `uv sync --locked`; die Skripte brauchen nur pandas und pyarrow):
+
+```
+gh release download v0.1.0 --pattern '*.tar.gz' --pattern 'SHA256SUMS*' --dir evidence
+(cd evidence && sha256sum -c SHA256SUMS && for f in *.tar.gz; do tar -xzf "$f"; done && sha256sum -c SHA256SUMS-contents.txt)
+uv run python scripts/window_digest.py --store evidence/data-window-v1
+uv run python scripts/recompute_headline.py --run-dir evidence/runs/test-v1 --store-dir evidence/data-window-v1
+```
+
+Die ersten beiden Zeilen prüfen die Archive und ihren Inhalt. `window_digest.py` muss für den Auszug den
+`combined_sha256` `9585ddc4…` ausgeben. `recompute_headline.py` berechnet CRPS, MAE, Abdeckung 80/90 %, die Veränderung
+gegen `naive_week` und `tso_reference` und das Wetter-Paar (1,118.3 gegen 1,201.8, 638 Ursprünge) aus
+`points.parquet` neu, vergleicht sie mit `summary.json` und prüft `y` gegen den Auszug; erwartet wird
+`all numbers agree` und Exit-Code 0. Mit `evidence/runs/test-v1-noon` und `evidence/runs/val-v1` entsprechend. Den
+Digest eines eigenen Stores berechnet `uv run python scripts/window_digest.py --store data/store`. Die Läufe selbst
+neu zu rechnen (`lastprog backtest`, Befehle in der Lauftabelle) braucht einen Store mit denselben Zeilen; dafür den
+Auszug als `data/store/` ablegen. Das ist hier nicht ausgeführt worden.
+
 ## Grenzen
 
 - Zeitreihenfehler sind nicht austauschbar; die endliche Abdeckungsgarantie der konformen Verfahren gilt nicht,
   Abdeckung wird empirisch beurteilt.
 - Keine Schulferien als Merkmal (keine lizenzierte, gepflegte Quelle geprüft).
+- Datenstand der Last (Serie 410): Lags, Zielwerte und die Residuen der konformen Verfahren stammen aus dem
+  SMARD-Verlauf, wie er am 2026-10-25 abgerufen wurde, also womöglich aus nachträglich revidierten Werten. SMARD kann
+  die Last der letzten Tage und Wochen nach der Erstveröffentlichung ändern; der Live-Betrieb sieht dagegen die
+  Erstveröffentlichung (zwei Stunden alt). Der Backtest ist damit bezüglich der Datenfassung nur näherungsweise
+  Echtzeit. Die Größe der Revisionen wurde nicht gemessen. Dieser Vorbehalt gilt, sobald Live-Zahlen neben die
+  Backtest-Zahlen gestellt werden.
 - Die Referenz 411 ("Prognostizierter Stromverbrauch" in SMARD) wird als Prognose der Netzbetreiber behandelt; das
   wurde nur an einem einzigen Wert des SMARD-Diagramms geprüft (`docs/data-notes.md`). Wer sie erzeugt hat, wann
   jeder Wert veröffentlicht wurde und ob die Historie die Day-ahead-Fassung oder eine spätere Revision enthält, ist

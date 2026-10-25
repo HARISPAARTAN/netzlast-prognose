@@ -128,10 +128,13 @@ docker run --rm -p 8000:8000 -e LASTPROG_MODE=full -e LASTPROG_DATA_DIR=/data \
 
 ## Reproduzierbarkeit
 
-`uv.lock` mit festem Stichtag, feste Seeds, deterministisches LightGBM. Ein Wiederholungslauf auf demselben Datenstand
-ergab identische Ergebnisse. Befehle, Git-SHA, Datenhash und Laufzeit jedes Laufs stehen in
-[docs/backtest.md](docs/backtest.md); das Protokoll in [docs/protocol.md](docs/protocol.md), Abweichungen in
-[docs/backtest-log.md](docs/backtest-log.md). Die Gewichte des ausgelieferten Modells stammen aus einem CI-Lauf und
+`uv.lock` mit festem Stichtag, feste Seeds, deterministisches LightGBM. Wiederholt wurde nur der Sensitivitätslauf
+(`lgbm_cqr` und `naive_week`, 12:00-Regel) auf demselben Rechner und Datenstand; er war byte-gleich. MSTL, der
+Wetterpfad und andere Plattformen sind nicht wiederholt worden. Befehle, Git-SHA, Datenhash und Laufzeit jedes Laufs
+stehen in [docs/backtest.md](docs/backtest.md); das Protokoll in [docs/protocol.md](docs/protocol.md), Abweichungen in
+[docs/backtest-log.md](docs/backtest-log.md). Die Ausgaben je Ursprung, ein Digest über das Protokollfenster der
+Daten und die Prüfbefehle liegen als Assets am Release v0.1.0 (Abschnitt "Belege und Nachprüfung" in
+[docs/backtest.md](docs/backtest.md)); der ursprüngliche Datenhash des Gesamtstores ist nicht mehr nachprüfbar. Die Gewichte des ausgelieferten Modells stammen aus einem CI-Lauf und
 sind nicht byte-gleich mit einem lokalen Nachtraining (siehe unten und [docs/model-card.md](docs/model-card.md)).
 
 ## Was nicht funktioniert hat

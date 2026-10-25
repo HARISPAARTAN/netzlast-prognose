@@ -125,9 +125,13 @@ docker run --rm -p 8000:8000 -e LASTPROG_MODE=full -e LASTPROG_DATA_DIR=/data \
 
 ## Reproducibility
 
-`uv.lock` with a fixed cut-off date, fixed seeds, deterministic LightGBM. A rerun on the same data snapshot gave
-identical results. Commands, git SHA, data hash and runtime of every run are in [docs/backtest.md](docs/backtest.md);
-the protocol is in [docs/protocol.md](docs/protocol.md), deviations in [docs/backtest-log.md](docs/backtest-log.md).
+`uv.lock` with a fixed cut-off date, fixed seeds, deterministic LightGBM. Only the sensitivity run (`lgbm_cqr` and
+`naive_week`, noon rule) was repeated, on the same machine and data snapshot; it was byte-identical. MSTL, the weather
+path and other platforms have not been rerun. Commands, git SHA, data hash and runtime of every run are in
+[docs/backtest.md](docs/backtest.md); the protocol is in [docs/protocol.md](docs/protocol.md), deviations in
+[docs/backtest-log.md](docs/backtest-log.md). The per-origin outputs, a digest over the protocol window of the data
+and the check commands are release assets of v0.1.0 (section "Belege und Nachprüfung" in
+[docs/backtest.md](docs/backtest.md), in German); the original whole-store data hash can no longer be verified.
 The weights of the served model come from a CI run and are not byte-identical to a local retrain (see below and
 [docs/model-card.md](docs/model-card.md)).
 
