@@ -66,7 +66,10 @@ TEXT = {
             "Backtest mit monatlicher Neuschätzung (jeder Monat vom davor trainierten Modell bewertet) und bewerten "
             "nicht das ausgelieferte Modell, das bis Ende des Testzeitraums trainiert wurde. lgbm_cqr_wx nutzt "
             "Wetter aus Open-Meteo Previous Runs und existiert nur im Backtest; sein Vergleich mit lgbm_cqr umfasst "
-            "nur die 638 Ursprünge ab 2025-01-01."
+            "nur die 638 Ursprünge ab 2025-01-01. Die Tabellenzeile von lgbm_cqr_wx gepoolt über alle 730 Ursprünge "
+            "ist nicht dieser Vergleich: Wetter gibt es erst ab 2024, in den ersten Monaten fehlt es weitgehend. "
+            "Der angezeigte Store-Hash gehört zu einem Datenstand, der nicht mehr rekonstruierbar ist; Belege "
+            "(Release-Assets, Prüfsummen) und ein Digest über das Protokollfenster stehen in docs/backtest.md."
         ),
         "caveats_link": 'Einzelheiten: <a href="https://github.com/HARISPAARTAN/netzlast-prognose/blob/main/docs/backtest.md">docs/backtest.md</a>',
         "run": "Lauf",
@@ -108,7 +111,10 @@ TEXT = {
             "the model trained before it) and do not evaluate the served model, which was trained through the end "
             "of the test period. lgbm_cqr_wx uses Open-Meteo Previous Runs weather and exists in the backtest only; "
             "its comparison with lgbm_cqr covers only the "
-            "638 origins from 2025-01-01."
+            "638 origins from 2025-01-01. The lgbm_cqr_wx table row pooled over all 730 origins is not that "
+            "comparison: weather exists only from 2024 on and is largely missing in the first months. The store "
+            "hash shown belongs to a data snapshot that can no longer be reconstructed; the evidence (release "
+            "assets, checksums) and a digest over the protocol window are in docs/backtest.md."
         ),
         "caveats_link": 'Details: <a href="https://github.com/HARISPAARTAN/netzlast-prognose/blob/main/docs/backtest.md">docs/backtest.md</a>',
         "run": "Run",
