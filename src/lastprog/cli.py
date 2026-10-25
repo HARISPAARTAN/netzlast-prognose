@@ -9,6 +9,7 @@ import shutil
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
 import typer
 
 from .config import load_settings
@@ -211,3 +212,46 @@ def serve(host: str = "0.0.0.0", port: int = 8000) -> None:
     import uvicorn
 
     uvicorn.run("lastprog.api:app", host=host, port=port)
+
+
+@app.command()
+def live(
+    log_dir: Path = typer.Option(..., "--log-dir", help="Checkout of the forecast-log branch"),
+    no_fetch: bool = typer.Option(False, "--no-fetch"),
+    max_missing_hours: int = typer.Option(24, "--max-missing-hours"),
+) -> None:
+    """Daily job: fetch recent data, issue tomorrow's forecast, score finished days, log freshness."""
+    from .api import build_forecaster
+    from .ingest import fetch_smard
+    from .live import append_freshness, issue, score_pending
+    from .service import DataNotReady
+
+    _setup_logging()
+    s = load_settings()
+    now = pd.Timestamp.now(tz="UTC").floor("s")
+    if not no_fetch:
+        fetch_smard(s, (now - pd.Timedelta(days=120)).date(), None)
+    fc = build_forecaster(s)
+    try:
+        written = issue(fc, log_dir, now, max_missing_hours)
+    except DataNotReady as exc:  # late SMARD publication: skip today, never fabricate an entry
+        written = None
+        logging.getLogger("lastprog.live").warning("no forecast issued: %s", exc)
+        typer.echo(f"::warning::no forecast issued: {exc}")
+    scored = score_pending(fc, log_dir, now)
+    append_freshness(log_dir, now, fc.store.last_observed("load_actual"))
+    typer.echo(f"issued: {written}; scored: {[p.name for p in scored]}")
+
+
+@app.command()
+def report(
+    run_id: str = typer.Option("test-v1", "--run-id"),
+    log_dir: Path = typer.Option(None, "--log-dir"),
+    out: Path = typer.Option(None, "--out"),
+) -> None:
+    """Build the static plots page from docs/results/<run_id> and the forecast log."""
+    from .report import build_site
+
+    s = load_settings()
+    for p in build_site(s.paths.results, run_id, log_dir, out or s.paths.site):
+        typer.echo(str(p))

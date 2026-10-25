@@ -1,0 +1,50 @@
+name: Refit
+
+on:
+  schedule:
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refit
+  cancel-in-progress: false
+
+jobs:
+  refit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: smard-raw-${{ github.run_id }}
+          restore-keys: smard-raw-
+      - name: Fetch three years plus the calibration history
+        run: uv run lastprog fetch --from "$(date -u -d "$(date -u +%Y-%m-01) -1200 days" +%F)"
+      - name: Train the monthly refit
+        run: uv run lastprog train --as-of "$(date -u +%Y-%m-01)"
+      - name: Upload the model and commit its manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat models/LATEST)
+          tar -czf "models/model-${VERSION}.tar.gz" -C models "${VERSION}"
+          gh release view models > /dev/null 2>&1 || gh release create models --latest=false --prerelease \
+            --title "Served models" --notes "LightGBM quantile models used by the live job; one asset per monthly refit."
+          gh release upload models "models/model-${VERSION}.tar.gz" --clobber
+          sha256sum "models/model-${VERSION}.tar.gz"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models/LATEST "models/${VERSION}/manifest.json"
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(model): monthly refit ${VERSION}"
+            git push origin HEAD:main
+          fi

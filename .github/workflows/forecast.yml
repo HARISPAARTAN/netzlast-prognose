@@ -1,0 +1,55 @@
+name: Forecast
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: forecast-log
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out (or create) the orphan branch forecast-log in ./log
+        run: |
+          if git ls-remote --exit-code --heads origin forecast-log; then
+            git fetch origin forecast-log
+            git worktree add -B forecast-log log origin/forecast-log
+          else
+            git worktree add --orphan -b forecast-log log
+          fi
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: smard-raw-${{ github.run_id }}
+          restore-keys: smard-raw-
+      - name: Download the served model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat models/LATEST)
+          gh release download models --pattern "model-${VERSION}.tar.gz" --dir models --clobber
+          tar -xzf "models/model-${VERSION}.tar.gz" -C models
+      - run: uv run lastprog live --log-dir log
+      - name: Commit the log entry
+        working-directory: log
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(log): forecast run $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push origin forecast-log
+          fi
