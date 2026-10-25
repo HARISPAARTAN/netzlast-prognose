@@ -82,8 +82,8 @@ never overwritten; format and changes of the log: [docs/live-log.md](docs/live-l
 
 ## Quick start
 
-Demo (offline, bundled fixture period). The package on GHCR must be public for this (see "Open items"); until then,
-build the image yourself with `docker build -t netzlast-prognose .`.
+Demo (offline, bundled fixture period). You can also build the image yourself:
+`docker build -t netzlast-prognose .`.
 
 ```bash
 docker run --rm -p 8000:8000 ghcr.io/harispaartan/netzlast-prognose:0.1.0
@@ -183,9 +183,11 @@ The weights of the served model come from a CI run and are not byte-identical to
 
 ## Open items for the owner
 
-1. **GHCR visibility.** New GHCR packages are private. After the tag `v0.1.0`, set the package `netzlast-prognose` to
-   "Public" in the package settings so that `docker run ghcr.io/harispaartan/netzlast-prognose:0.1.0` works without a
-   login.
+1. **GHCR visibility.** New GHCR packages are usually private. After the tag `v0.1.0`, the image `0.1.0` could be
+   fetched without a login on 2026-10-25 (an anonymous manifest request returned 200), so the package appears to be
+   public; the automation token was not allowed to read the setting. Please confirm in the package settings of
+   `netzlast-prognose` that the visibility is "Public", so that `docker run
+   ghcr.io/harispaartan/netzlast-prognose:0.1.0` works without a login.
 2. **Open-Meteo terms.** Read https://open-meteo.com/en/terms before any live use of weather. Until then
    `[weather] enabled = false` stays.
 3. **Eight-week wait.** Quote no live metric before 56 days are scored on `forecast-log` (with a gapless daily run, not

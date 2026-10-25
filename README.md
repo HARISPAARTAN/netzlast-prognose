@@ -85,8 +85,8 @@ Format und Änderungen des Protokolls: [docs/live-log.md](docs/live-log.md).
 
 ## Schnellstart
 
-Demo (offline, gebündelter Fixture-Zeitraum). Das Paket auf GHCR muss dafür öffentlich sein (siehe "Offene Punkte");
-bis dahin lässt sich das Image mit `docker build -t netzlast-prognose .` selbst bauen.
+Demo (offline, gebündelter Fixture-Zeitraum). Das Image lässt sich auch selbst bauen:
+`docker build -t netzlast-prognose .`.
 
 ```bash
 docker run --rm -p 8000:8000 ghcr.io/harispaartan/netzlast-prognose:0.1.0
@@ -187,8 +187,10 @@ sind nicht byte-gleich mit einem lokalen Nachtraining (siehe unten und [docs/mod
 
 ## Offene Punkte für den Betreiber
 
-1. **GHCR-Sichtbarkeit.** Neue Pakete auf GHCR sind privat. Nach dem Tag `v0.1.0` das Paket
-   `netzlast-prognose` unter den Paket-Einstellungen auf "Public" stellen, damit `docker run
+1. **GHCR-Sichtbarkeit.** Neue Pakete auf GHCR sind meist privat. Nach dem Tag `v0.1.0` ließ sich das Image
+   `0.1.0` am 2026-10-25 ohne Anmeldung abrufen (anonymer Manifest-Abruf lieferte 200), das Paket wirkt also öffentlich;
+   der Zugriffstoken der Automatisierung durfte die Einstellung nicht lesen. Bitte unter den Paket-Einstellungen von
+   `netzlast-prognose` bestätigen, dass die Sichtbarkeit "Public" ist, damit `docker run
    ghcr.io/harispaartan/netzlast-prognose:0.1.0` ohne Anmeldung funktioniert.
 2. **Open-Meteo-Bedingungen.** Vor jeder Live-Nutzung von Wetter die Bedingungen unter
    https://open-meteo.com/en/terms lesen. Bis dahin bleibt `[weather] enabled = false`.
