@@ -23,6 +23,7 @@ Jeder Eintrag: Datum (UTC), Lauf, was geschah, warum. Abweichungen vor `protocol
 
 | Datum | Lauf | Eintrag |
 |---|---|---|
+| 2026-10-25 | vor `protocol-v1` | Offenlegung: Die Prüfung von Aufgabe 4 bewertete vor dem Tag das Wettermodell auf drei Ursprüngen im März 2025 des echten Stores und machte Laufzeittests mit 60 Ursprüngen; nichts wurde deshalb getunt oder geändert, die Wirkung auf die Ergebnisse ist vernachlässigbar (3 von 730 Ursprüngen, H3 war vorregistriert). Das Protokoll wurde danach im Wortlaut angepasst (Kopfzeile). |
 | 2026-10-25 | val-v1 | Baselines und LightGBM auf dem Validierungsjahr bewertet (vor dem Tag), Ausgangswerte der Hyperparameter, Laufzeit 242 s. |
 | 2026-10-25 | tuning-v1 | 12 Einstellungen bewertet (Summe der Laufzeiten 1376 s); beste Einstellung 5 (63 Blätter, Lernrate 0,1, 200 Bäume, 100 Mindestproben, Pinball 590,997) eingefroren. |
 | 2026-10-25 | test-v1 | Tag `protocol-v1` (Commit 91470fc) gepusht, danach Testzeitraum mit 9 Modellen bewertet; Laufzeit 694 s, `protocol_v1: true`, Arbeitsbaum sauber. |

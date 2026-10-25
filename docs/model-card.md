@@ -52,4 +52,9 @@ vor der Auswertung eingefroren (`protocol-v1`).
 - Keine Schulferien als Merkmal.
 - Konforme Kalibrierung ohne Austauschbarkeit: Abdeckung kann in Regimewechseln abweichen (siehe Monatswerte).
 - Feiertage mit kleinem Bevölkerungsanteil und Brückentage sind selten; die Schätzungen dort sind unsicher.
-- Die Prognose der Netzbetreiber ist im Mittel schlechter (CRPS 1,355.9 gegen 1,201.6).
+- Die Referenz der Netzbetreiber ist im Mittel schlechter (CRPS 1,355.9 gegen 1,201.6). Sie beruht auf SMARD
+  Filter 411 ("Prognostizierter Stromverbrauch"), hier als Day-ahead-Prognose der Netzbetreiber behandelt; die
+  Zuordnung wurde nur an einem einzigen Stundenwert des SMARD-Diagramms geprüft, Veröffentlichungszeit und Fassung
+  (Vintage) sind unbekannt. Die Quantile dieser Referenz (`tso_reference`) sind unsere eigene Konstruktion aus den
+  Residuen der letzten 56 Tage, keine Prognose der Netzbetreiber.
+- Der CRPS ist die Gitternäherung aus 19 Quantilen (siehe `docs/backtest.md`).

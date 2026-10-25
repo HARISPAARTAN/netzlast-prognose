@@ -1,7 +1,7 @@
 # Evaluationsprotokoll v1 (vorregistriert)
 
-Stand: eingefroren mit dem Git-Tag `protocol-v1`, bevor ein Modell auf dem Testzeitraum bewertet wurde. Jede spätere
-Änderung steht mit Datum und Grund in `docs/backtest-log.md`.
+Stand: eingefroren mit dem Git-Tag `protocol-v1`, bevor ein Modell auf dem Testzeitraum vollständig bewertet wurde
+(kleine Vorabtests: siehe `docs/backtest-log.md`). Jede spätere Änderung steht mit Datum und Grund in `docs/backtest-log.md`.
 
 ## 1. Frage
 

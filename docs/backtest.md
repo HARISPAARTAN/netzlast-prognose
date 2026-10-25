@@ -1,7 +1,7 @@
 # Backtest-Ergebnisse v1
 
 Protokoll: `docs/protocol.md` (Tag `protocol-v1`). Alle Zahlen stammen aus den unten genannten Läufen; jede Tabelle
-nennt ihre Lauf-ID. CRPS, MAE und RMSE in MWh je Stunde, MAPE in Prozent. Zahlen mit Dezimalpunkt wie in den
+nennt ihre Lauf-ID. Der CRPS ist die Gitternäherung aus den 19 Quantilen (2/(K+1) mal die Summe der Pinball-Verluste, Protokoll Abschnitt 12 Punkt 1), nicht das exakte Integral. CRPS, MAE und RMSE in MWh je Stunde, MAPE in Prozent. Zahlen mit Dezimalpunkt wie in den
 Ergebnisdateien unter `docs/results/`.
 
 ## Kurzfassung
@@ -17,10 +17,18 @@ Ergebnisdateien unter `docs/results/`.
   1,118.3, ohne 1,201.8 (-6.9 %, 638 Ursprünge,
   einseitiger DM-p-Wert 7.1e-20).
 - Referenz der Netzbetreiber: CRPS 1,355.9 gegen 1,201.6 für `lgbm_cqr`
-  (-11.4 %; DM 0.0001 zweiseitig). Die Referenz nutzt
-  Informationen, die das Modell nicht hat; sie ist ein Maßstab, kein fairer Gegner.
+  (-11.4 %; DM 0.0001 zweiseitig). Grundlage ist Filter 411 von SMARD ("Prognostizierter Stromverbrauch"), hier als
+  Day-ahead-Prognose der Netzbetreiber behandelt; die Zuordnung wurde nur an einem einzigen Stundenwert des
+  SMARD-Diagramms geprüft, Veröffentlichungszeit und Fassung (Vintage) sind unbekannt. Die Quantile
+  (`tso_reference`) sind unsere eigene Konstruktion aus den Residuen der letzten 56 Tage, keine probabilistische
+  Prognose der Netzbetreiber. Die Referenz hat womöglich Informationen, die das Modell zur Ausgabezeit nicht hat;
+  sie ist ein Maßstab, kein fairer Gegner.
 
 ## Läufe
+
+Vor dem Tag `protocol-v1` wurden bei der Prüfung von Aufgabe 4 das Wettermodell auf drei Ursprüngen im März 2025
+bewertet und Laufzeittests mit 60 Ursprüngen gemacht; nichts wurde deshalb geändert oder getunt, der Einfluss auf die
+Ergebnisse ist vernachlässigbar (`docs/backtest-log.md`).
 
 | Lauf | Zeitraum | Modelle | Befehl | Git-SHA | Store-Hash | Laufzeit |
 |---|---|---|---|---|---|---|
@@ -110,7 +118,7 @@ Git SHA: `91470fc764a81507332c9857203e8e09f8a21d49` · store snapshot: `5a0c9ddb
 | H1 | yes | `{"naive_week": {"p_a_better": 4.94079636204769e-16, "supported": true}}` |
 
 Der CRPS von `lgbm_cqr` ändert sich gegenüber test-v1 um +1.9 % (1,224.0
-gegen 1,201.6); der von `naive_week` um +70.6 %. Unter dieser Regel ist der Tag D-1 nur
+gegen 1,201.6); der von `naive_week` um +0.7 % (2,085.7 gegen 2,071.1). Unter dieser Regel ist der Tag D-1 nur
 zur Hälfte beobachtet, `lag_d1` fehlt für die Stunden 12 bis 23, und die Tagesstatistiken beruhen auf dem Halbtag.
 
 ## Validierungsjahr (val-v1, vor dem Tag)
@@ -283,7 +291,11 @@ Wochentag 0 = Montag; Monate nach Zieltag. Feiertag: Bevölkerungsanteil ≥ 0.5
 - Zeitreihenfehler sind nicht austauschbar; die endliche Abdeckungsgarantie der konformen Verfahren gilt nicht,
   Abdeckung wird empirisch beurteilt.
 - Keine Schulferien als Merkmal (keine lizenzierte, gepflegte Quelle geprüft).
-- Die Referenz 411 nutzt Informationen, die das Modell nicht hat; sie ist kein fairer Gegner, sondern ein Maßstab.
+- Die Referenz 411 ("Prognostizierter Stromverbrauch" in SMARD) wird als Prognose der Netzbetreiber behandelt; das
+  wurde nur an einem einzigen Wert des SMARD-Diagramms geprüft (`docs/data-notes.md`). Wer sie erzeugt hat, wann
+  jeder Wert veröffentlicht wurde und ob die Historie die Day-ahead-Fassung oder eine spätere Revision enthält, ist
+  nicht geprüft. Die Quantile von `tso_reference` sind unsere eigene residuenbasierte Konstruktion. Die Referenz
+  hat womöglich Informationen, die das Modell zur Ausgabezeit nicht hat; sie ist ein Maßstab, kein fairer Gegner.
 - `lgbm_cqr_wx` trainiert über 1095 Tage, Wetter existiert erst ab 2024-01-01; in den ersten Monaten des
   Wetter-Teilzeitraums sind viele Trainingszeilen ohne Wettermerkmale (NaN). Der Vergleich H3 ab 2025-01-01 ist
   korrekt, das Wettermodell war am Anfang aber im Nachteil.
