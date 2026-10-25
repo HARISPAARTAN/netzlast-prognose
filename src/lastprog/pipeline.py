@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import shlex
 import subprocess
@@ -83,6 +84,22 @@ def _versions() -> dict:
         except metadata.PackageNotFoundError:
             out[pkg] = None
     return out
+
+
+def build_environment() -> dict:
+    """Where a model was built: OS, Python and library versions, runner image and Actions run URL (if any)."""
+    env = os.environ
+    run_url = None
+    if env.get("GITHUB_RUN_ID") and env.get("GITHUB_REPOSITORY"):
+        server = env.get("GITHUB_SERVER_URL", "https://github.com")
+        run_url = f"{server}/{env['GITHUB_REPOSITORY']}/actions/runs/{env['GITHUB_RUN_ID']}"
+    return {
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "versions": _versions(),
+        "runner_image": " ".join(x for x in (env.get("ImageOS"), env.get("ImageVersion")) if x) or None,
+        "run_url": run_url,
+    }
 
 
 def execute_backtest(

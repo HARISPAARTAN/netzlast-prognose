@@ -19,10 +19,16 @@ from .features import build_features
 from .metrics import point_scores
 from .monitor import PSI_FEATURES, psi
 from .pipeline import git_sha
-from .service import DataNotReady, Forecaster
+from .service import DataNotReady, Forecaster, files_digest
 from .timekeys import cutoff_utc, day_index
 
 LIVE_MODELS = ("lgbm_cqr", "naive_week")
+# PSI compares the recent lag features with the training distribution, which spans three years. A window
+# shorter than one seasonal cycle alerts permanently (the load level follows the season), so the window is a
+# full year. Entries written before 2026-10-25 (the first one) used 28 days; see docs/live-log.md.
+DRIFT_WINDOW_DAYS = 365
+# The live job needs this many days of history in the store: the drift window plus the longest lag (D-13).
+HISTORY_DAYS = DRIFT_WINDOW_DAYS + 40
 
 
 def entry_path(log_dir: Path, target_day: date) -> Path:
@@ -30,8 +36,8 @@ def entry_path(log_dir: Path, target_day: date) -> Path:
 
 
 def _drift(fc: Forecaster, issue_day: date) -> dict:
-    """PSI of lag features over the last 28 target days against the training distribution in the manifest."""
-    days = [issue_day - timedelta(days=k) for k in range(27, -1, -1)]
+    """PSI of lag features over the last DRIFT_WINDOW_DAYS target days against the manifest's training distribution."""
+    days = [issue_day - timedelta(days=k) for k in range(DRIFT_WINDOW_DAYS - 1, -1, -1)]
     frames = [build_features(fc.store, d, cutoff_utc(d - timedelta(days=1)), fc.spec) for d in days]
     recent = pd.concat(frames)
     refs = fc.manifest.get("psi_reference", {})
@@ -67,6 +73,8 @@ def issue(fc: Forecaster, log_dir: Path, now: pd.Timestamp, max_missing_hours: i
             else max(0, int((cutoff - last) / pd.Timedelta(hours=1)) - 1),
             "model_version": fc.manifest["version"],
             "git_sha": git_sha(fc.settings.root),
+            "model_files_digest": files_digest(fc.manifest),
+            "psi_window_days": DRIFT_WINDOW_DAYS,
             "psi": _drift(fc, issue_day),
             "errors": errors,
         },

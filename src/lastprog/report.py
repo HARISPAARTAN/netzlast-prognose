@@ -56,6 +56,19 @@ TEXT = {
         "live": "Live-Vorwärtszeitraum: rollierender CRPS (28 Tage)",
         "live_note": "Vorläufig: weniger als acht Wochen bewertete Tage. Live-Zahlen werden erst danach zitiert.",
         "live_none": "Noch keine bewerteten Live-Tage.",
+        "caveats": (
+            "Einschränkungen. Die Referenz der Netzbetreiber ist SMARD-Filter 411, hier als deren Day-ahead-Prognose "
+            "behandelt; die Zuordnung wurde nur an einem Stundenwert des SMARD-Diagramms geprüft, Veröffentlichungszeit "
+            "und Fassung sind unbekannt, und die Referenz hat womöglich Informationen, die das Modell nicht hat. Die "
+            "Quantile von tso_reference sind unsere eigene Konstruktion aus den Residuen der letzten 56 Tage, keine "
+            "Prognose der Netzbetreiber. Der CRPS ist die Gitternäherung aus 19 Quantilen (2/(K+1) mal die Summe der "
+            "Pinball-Verluste), nicht das exakte Integral. Die Zahlen stammen aus dem vorregistrierten rollierenden "
+            "Backtest mit monatlicher Neuschätzung (jeder Monat vom davor trainierten Modell bewertet) und bewerten "
+            "nicht das ausgelieferte Modell, das bis Ende des Testzeitraums trainiert wurde. lgbm_cqr_wx nutzt "
+            "Wetter aus Open-Meteo Previous Runs und existiert nur im Backtest; sein Vergleich mit lgbm_cqr umfasst "
+            "nur die 638 Ursprünge ab 2025-01-01."
+        ),
+        "caveats_link": 'Einzelheiten: <a href="https://github.com/HARISPAARTAN/netzlast-prognose/blob/main/docs/backtest.md">docs/backtest.md</a>',
         "run": "Lauf",
         "model": "Modell",
         "x_hour": "Stunde",
@@ -85,6 +98,19 @@ TEXT = {
         "live": "Live forward period: rolling CRPS (28 days)",
         "live_note": "Preliminary: fewer than eight weeks of scored days. Live numbers are quoted only after that.",
         "live_none": "No scored live days yet.",
+        "caveats": (
+            "Caveats. The operators' reference is SMARD filter 411, treated here as their day-ahead forecast; that "
+            "assignment was checked against a single value of the SMARD chart, publication time and vintage are "
+            "unknown, and the reference may hold information the model does not. The tso_reference quantiles are our "
+            "own construction from the residuals of the last 56 days, not a forecast by the operators. CRPS is the "
+            "19-quantile grid approximation (2/(K+1) times the sum of pinball losses), not the exact integral. The "
+            "figures come from the pre-registered rolling-origin backtest with a monthly refit (each month scored by "
+            "the model trained before it) and do not evaluate the served model, which was trained through the end "
+            "of the test period. lgbm_cqr_wx uses Open-Meteo Previous Runs weather and exists in the backtest only; "
+            "its comparison with lgbm_cqr covers only the "
+            "638 origins from 2025-01-01."
+        ),
+        "caveats_link": 'Details: <a href="https://github.com/HARISPAARTAN/netzlast-prognose/blob/main/docs/backtest.md">docs/backtest.md</a>',
         "run": "Run",
         "model": "Model",
         "x_hour": "hour",
@@ -324,6 +350,7 @@ def render_page(
             )
         parts.append(
             f"<h2>{html.escape(t['table'])}</h2><div class=tablewrap>{_table(summary, t)}</div>{run_line}"
+            f"<p class=note>{html.escape(t['caveats'])} {t['caveats_link']}</p>"
         )
         parts.append(
             "<div class=grid2>"

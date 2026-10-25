@@ -56,3 +56,39 @@ def test_live_chart_appears_only_after_56_scored_days(fx_settings, fx_store, dem
     enough = render_page("en", None, None, entries, False)
     assert "Preliminary" in few and f"({LIVE_MIN_DAYS - 1}/{LIVE_MIN_DAYS})" in few
     assert "Preliminary" not in enough and enough.count("<svg") == few.count("<svg") + 1
+
+
+def _scored_base(fc, tmp_path):
+    path = issue(fc, tmp_path, pd.Timestamp("2025-11-03T07:00:00Z"))
+    score_pending(fc, tmp_path, pd.Timestamp("2025-11-06T07:00:00Z"))
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_gate_counts_scored_days_not_entries(fx_settings, fx_store, demo_model_dir, tmp_path):
+    fc = Forecaster(replace(fx_settings, mode="full"), fx_store, demo_model_dir)
+    base = _scored_base(fc, tmp_path)
+    days = pd.date_range("2025-01-01", periods=LIVE_MIN_DAYS)
+    scored = [{**base, "target_date_local": d.date().isoformat()} for d in days]
+    unscored = {**scored[-1], "scored": None}
+    # 55 scored days among 56 entries: the note with the count, no live chart.
+    page = render_page("en", None, None, scored[: LIVE_MIN_DAYS - 1] + [unscored], False)
+    assert "Preliminary" in page and f"({LIVE_MIN_DAYS - 1}/{LIVE_MIN_DAYS})" in page
+    assert page.count("<svg") == 1  # the fan chart only
+    # 56 scored days plus further unscored entries: the live chart appears.
+    page = render_page("en", None, None, scored + [unscored] * 3, False)
+    assert "Preliminary" not in page and page.count("<svg") == 2
+
+
+def test_page_states_the_backtest_caveats(fx_settings, fx_store, demo_model_dir, tmp_path):
+    out = execute_backtest(
+        fx_settings, fx_store, "fx", "fixtures", CORE_MODELS, out_root=tmp_path / "runs", progress=False
+    )
+    de = render_page("de", out["summary"], out["run"], [], False)
+    en = render_page("en", out["summary"], out["run"], [], False)
+    for page in (de, en):
+        assert "411" in page and "tso_reference" in page and "56" in page and "638" in page
+        assert "docs/backtest.md" in page and "2/(K+1)" in page
+    assert "an einem Stundenwert" in de and "single value" in en
+    assert "eigene Konstruktion" in de and "own construction" in en
+    assert "19 Quantilen" in de and "19-quantile" in en
+    assert "monatlicher Neuschätzung" in de and "monthly refit" in en

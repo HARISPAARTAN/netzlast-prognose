@@ -172,6 +172,9 @@ def train(
     period: str = typer.Option(None, "--period", help="'fixtures' trains the demo model"),
     out: Path = typer.Option(None, "--out", help="Output root (default: paths.models)"),
     results: str = typer.Option("test-v1", "--results", help="Run id whose summary goes into the manifest"),
+    build: int = typer.Option(
+        0, "--build", help="Build number: version YYYY.MM.<build>; a rebuild needs a new one"
+    ),
 ) -> None:
     """Fit the served model at origin --as-of and write <root>/<version>/ plus <root>/LATEST.
 
@@ -187,9 +190,27 @@ def train(
         models = json.loads(summary_path.read_text(encoding="utf-8"))["models"]
         test_metrics = backtest_reference(results, models)
     root = out or models_root(s)
-    model_dir = train_model(s, load_store(s), date.fromisoformat(as_of), root, test_metrics)
+    model_dir = train_model(s, load_store(s), date.fromisoformat(as_of), root, test_metrics, build)
     (Path(root) / "LATEST").write_text(model_dir.name + "\n", encoding="utf-8")
     typer.echo(str(model_dir))
+
+
+@app.command("refit-log")
+def refit_log(
+    version: str = typer.Option(..., "--version"),
+    tarball: Path = typer.Option(..., "--tarball", help="The uploaded model-<version>.tar.gz"),
+    log: Path = typer.Option(None, "--log", help="Default: models/refit-log.csv"),
+) -> None:
+    """Append the provenance of the trained model <version> to the refit log (refuses a duplicate version)."""
+    from .api import models_root
+    from .service import append_refit_log
+
+    s = _settings()
+    root = models_root(s)
+    row = append_refit_log(
+        log or Path(root) / "refit-log.csv", Path(root) / version / "manifest.json", tarball
+    )
+    typer.echo(json.dumps(row, indent=1))
 
 
 @app.command()
@@ -223,14 +244,14 @@ def live(
     """Daily job: fetch recent data, issue tomorrow's forecast, score finished days, log freshness."""
     from .api import build_forecaster
     from .ingest import fetch_smard
-    from .live import append_freshness, issue, score_pending
+    from .live import HISTORY_DAYS, append_freshness, issue, score_pending
     from .service import DataNotReady
 
     _setup_logging()
     s = load_settings()
     now = pd.Timestamp.now(tz="UTC").floor("s")
     if not no_fetch:
-        fetch_smard(s, (now - pd.Timedelta(days=120)).date(), None)
+        fetch_smard(s, (now - pd.Timedelta(days=HISTORY_DAYS)).date(), None)
     fc = build_forecaster(s)
     try:
         written = issue(fc, log_dir, now, max_missing_hours)

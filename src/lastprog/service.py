@@ -10,6 +10,7 @@ therefore deterministic for (model version, target date, store snapshot).
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 from dataclasses import asdict
@@ -26,7 +27,7 @@ from .models.baselines import residual_quantiles
 from .models.conformal import cqr_adjust
 from .models.lgbm import LgbmQuantile
 from .monitor import PSI_FEATURES, psi_reference
-from .pipeline import PROTOCOL_TAG, git_sha
+from .pipeline import PROTOCOL_TAG, build_environment, git_sha
 from .store import Store
 from .timekeys import cutoff_utc, issue_time_utc, local_labels, utc_labels
 
@@ -58,8 +59,9 @@ class ModelIntegrityError(RuntimeError):
     """A model file does not match the sha256 recorded in its manifest."""
 
 
-def model_version(as_of: date) -> str:
-    return f"{as_of.year}.{as_of.month:02d}.0"
+def model_version(as_of: date, build: int = 0) -> str:
+    """YYYY.MM.<build>. A refit of the same month that must not replace an existing model gets a new build."""
+    return f"{as_of.year}.{as_of.month:02d}.{build}"
 
 
 def file_sha256(path: Path) -> str:
@@ -68,6 +70,85 @@ def file_sha256(path: Path) -> str:
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def files_digest(manifest: dict) -> str | None:
+    """One digest for a built model: sha256 over the sorted "name:sha256" lines of the manifest's files."""
+    files = manifest.get("files_sha256")
+    if not files:
+        return None
+    text = "".join(f"{name}:{sha}\n" for name, sha in sorted(files.items()))
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def training_data_digest(store: Store, from_ts: pd.Timestamp, cutoff: pd.Timestamp) -> dict:
+    """Digest of the load observations a refit can see: ts_utc and value of load_actual in [from_ts, cutoff).
+
+    Unlike the store snapshot it ignores everything at or after the cut-off and anything older than the
+    training horizon, so two stores that agree on the data actually used give the same digest.
+    """
+    s = store.series("load_actual")
+    s = s[(s.index >= from_ts) & (s.index < cutoff)]
+    body = pd.DataFrame({"ts_utc": s.index.asi8, "value": s.to_numpy("float64")})
+    hashed = pd.util.hash_pandas_object(body, index=False).to_numpy()
+    return {
+        "series": "load_actual",
+        "from_utc": from_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "to_utc_exclusive": cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "rows": int(len(s)),
+        "rows_missing": int(s.isna().sum()),
+        "sha256": hashlib.sha256(hashed.tobytes()).hexdigest(),
+    }
+
+
+REFIT_LOG_COLUMNS = [
+    "version",
+    "as_of",
+    "git_sha",
+    "built_at_utc",
+    "platform",
+    "python",
+    "lightgbm",
+    "runner_image",
+    "run_url",
+    "training_data_sha256",
+    "model_files_digest",
+    "tarball_sha256",
+    "note",
+]
+
+
+def append_refit_log(log_path: Path, manifest_path: Path, tarball: Path) -> dict:
+    """Append one row for the model in `manifest_path`; a version that is already logged is refused."""
+    log_path = Path(log_path)
+    m = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    built = m.get("built_on") or {}
+    row = {
+        "version": m["version"],
+        "as_of": m["as_of"],
+        "git_sha": m.get("git_sha"),
+        "built_at_utc": built.get("built_at_utc"),
+        "platform": built.get("platform"),
+        "python": (built.get("versions") or {}).get("python"),
+        "lightgbm": (built.get("versions") or {}).get("lightgbm"),
+        "runner_image": built.get("runner_image"),
+        "run_url": built.get("run_url"),
+        "training_data_sha256": (m.get("training_data") or {}).get("sha256"),
+        "model_files_digest": files_digest(m),
+        "tarball_sha256": file_sha256(tarball),
+        "note": "",
+    }
+    exists = log_path.exists()
+    if exists:
+        with log_path.open(encoding="utf-8", newline="") as fh:
+            if any(r["version"] == row["version"] for r in csv.DictReader(fh)):
+                raise ValueError(f"version {row['version']} is already in {log_path}; use a new build number")
+    with log_path.open("a", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=REFIT_LOG_COLUMNS, lineterminator="\n")
+        if not exists:
+            w.writeheader()
+        w.writerow({k: "" if v is None else v for k, v in row.items()})
+    return row
 
 
 def backtest_reference(run_id: str, models: dict) -> dict:
@@ -89,12 +170,17 @@ def backtest_reference(run_id: str, models: dict) -> dict:
 
 
 def train_model(
-    settings: Settings, store: Store, as_of: date, out_root: Path, test_metrics: dict | None = None
+    settings: Settings,
+    store: Store,
+    as_of: date,
+    out_root: Path,
+    test_metrics: dict | None = None,
+    build: int = 0,
 ) -> Path:
     """Fit the served lgbm_qr at origin `as_of`, write q_*.txt, calibration.parquet and manifest.json."""
     taus = taus_of(settings)
     spec = feature_spec(settings, with_weather=False)
-    version = model_version(as_of)
+    version = model_version(as_of, build)
     out_dir = Path(out_root) / version
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,6 +210,10 @@ def train_model(
     model.fit(X, y)
     files = model.save(out_dir)
     files_sha256 = {name: file_sha256(out_dir / name) for name in [*files, "calibration.parquet"]}
+    # Everything a refit can read: the training window, the calibration backtest (conformal window origins, each
+    # with its own three-year window) and the longest lag.
+    horizon = settings.backtest.train_window_days + window + 1 + 14
+    data_from = pd.Timestamp(as_of - timedelta(days=horizon), tz="UTC")
     manifest = {
         "name": "lgbm_cqr",
         "base": "lgbm_qr",
@@ -147,6 +237,11 @@ def train_model(
         "git_sha": git_sha(settings.root),
         "protocol_tag": PROTOCOL_TAG,
         "store_hash": store.snapshot(),
+        "training_data": training_data_digest(store, data_from, cutoff),
+        "built_on": {
+            **build_environment(),
+            "built_at_utc": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
         "test_metrics": test_metrics or {},
         "psi_reference": {f: psi_reference(X[f].to_numpy("float64")) for f in PSI_FEATURES},
     }
@@ -344,6 +439,7 @@ class Forecaster:
             "model_version": m.get("version"),
             "model_git_sha": m.get("git_sha"),
             "model_store_hash": m.get("store_hash"),
+            "model_files_digest": files_digest(m),
             "protocol_tag": m.get("protocol_tag"),
             "store_hash": self.store_hash(),
             "data_last_ts_utc": last_s,
@@ -379,6 +475,9 @@ class Forecaster:
                 "features": m["features"],
                 "git_sha": m.get("git_sha"),
                 "store_hash": m.get("store_hash"),
+                "training_data": m.get("training_data"),
+                "built_on": m.get("built_on"),
+                "model_files_digest": files_digest(m),
                 "protocol_tag": m.get("protocol_tag"),
                 "files_sha256": m.get("files_sha256", {}),
                 "test_metrics": reference("lgbm_cqr"),

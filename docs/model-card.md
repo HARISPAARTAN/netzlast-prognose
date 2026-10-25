@@ -58,3 +58,15 @@ vor der Auswertung eingefroren (`protocol-v1`).
   (Vintage) sind unbekannt. Die Quantile dieser Referenz (`tso_reference`) sind unsere eigene Konstruktion aus den
   Residuen der letzten 56 Tage, keine Prognose der Netzbetreiber.
 - Der CRPS ist die Gitternäherung aus 19 Quantilen (siehe `docs/backtest.md`).
+
+## Herkunft der ausgelieferten Gewichte
+
+Die ausgelieferten Modelldateien (Version 2026.10.0) stammen aus dem Refit-Workflow auf einem GitHub-Runner
+(`ubuntu-24.04`), nicht aus einem lokalen Lauf. Ein lokales Nachtraining mit demselben Code, denselben Merkmalen,
+Zeilen und Fenstern (`--as-of 2026-10-01`, Windows 11) liefert andere Dateien: keine der 20 Modelldateien ist
+byte-gleich, die Kalibrierungswerte weichen um bis zu 1,6 % ab, der Median liegt bei Stunde 12 innerhalb von 0,2 %.
+Die Ursache ist nicht nachgewiesen; die wahrscheinlichste Erklärung ist die Plattform (Betriebssystem, Bibliotheks-
+builds), geprüft wurde das nicht. Deshalb halten Manifest und `models/refit-log.csv` ab der nächsten Neuschätzung
+Plattform, Python-, LightGBM- und NumPy-Version, die Actions-Lauf-URL und einen Digest der tatsächlich gelesenen
+Lastdaten fest; ein Modell-Asset wird nie ersetzt (`docs/live-log.md`). Die Zahlen von test-v1 beschreiben das
+Verfahren der monatlichen Neuschätzung, nicht diese Dateien.

@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 3 1 * *"
   workflow_dispatch:
+    inputs:
+      build:
+        description: "Build number of the month's model (YYYY.MM.<build>). A rebuild needs a new, unused number."
+        required: false
+        default: "0"
 
 permissions:
   contents: write
@@ -27,23 +32,40 @@ jobs:
           path: data/raw
           key: smard-raw-${{ github.run_id }}
           restore-keys: smard-raw-
+      - name: Name the version and refuse to replace an existing model
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          BUILD="${BUILD:-0}"
+          case "$BUILD" in (*[!0-9]*) echo "::error::build must be a number"; exit 1;; esac
+          AS_OF="$(date -u +%Y-%m-01)"
+          VERSION="${AS_OF:0:4}.${AS_OF:5:2}.${BUILD}"
+          if gh release view models --json assets -q '.assets[].name' 2>/dev/null | grep -qx "model-${VERSION}.tar.gz"; then
+            echo "::error::model ${VERSION} already exists as a release asset; dispatch again with a new build number"
+            exit 1
+          fi
+          echo "AS_OF=${AS_OF}" >> "$GITHUB_ENV"
+          echo "BUILD_NO=${BUILD}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
       - name: Fetch three years plus the calibration history
-        run: uv run lastprog fetch --from "$(date -u -d "$(date -u +%Y-%m-01) -1200 days" +%F)"
+        run: uv run lastprog fetch --from "$(date -u -d "${AS_OF} -1200 days" +%F)"
       - name: Train the monthly refit
-        run: uv run lastprog train --as-of "$(date -u +%Y-%m-01)"
-      - name: Upload the model and commit its manifest
+        run: uv run lastprog train --as-of "${AS_OF}" --build "${BUILD_NO}"
+      - name: Upload the model, log the build and commit its manifest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(cat models/LATEST)
+          test "$(cat models/LATEST)" = "${VERSION}"
           tar -czf "models/model-${VERSION}.tar.gz" -C models "${VERSION}"
-          gh release view models > /dev/null 2>&1 || gh release create models --latest=false --prerelease \
-            --title "Served models" --notes "LightGBM quantile models used by the live job; one asset per monthly refit."
-          gh release upload models "models/model-${VERSION}.tar.gz" --clobber
+          gh release view models > /dev/null 2>&1 || gh release create models --latest=false --prerelease             --title "Served models" --notes "LightGBM quantile models used by the live job; one asset per refit, never replaced."
+          # No --clobber: an existing asset of this version makes the upload fail.
+          gh release upload models "models/model-${VERSION}.tar.gz"
           sha256sum "models/model-${VERSION}.tar.gz"
+          uv run lastprog refit-log --version "${VERSION}" --tarball "models/model-${VERSION}.tar.gz"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models/LATEST "models/${VERSION}/manifest.json"
+          git add models/LATEST "models/${VERSION}/manifest.json" models/refit-log.csv
           if ! git diff --cached --quiet; then
             git commit -m "chore(model): monthly refit ${VERSION}"
             git push origin HEAD:main
