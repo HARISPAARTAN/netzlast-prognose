@@ -1,0 +1,128 @@
+{
+ "period": [
+  "2023-10-01",
+  "2024-09-30"
+ ],
+ "grid": [
+  {
+   "setting": 0,
+   "num_leaves": 15,
+   "learning_rate": 0.05,
+   "n_estimators": 400,
+   "min_child_samples": 50,
+   "pinball": 597.1523143021936,
+   "runtime_s": 64.0
+  },
+  {
+   "setting": 1,
+   "num_leaves": 15,
+   "learning_rate": 0.1,
+   "n_estimators": 200,
+   "min_child_samples": 50,
+   "pinball": 597.2263665300161,
+   "runtime_s": 36.4
+  },
+  {
+   "setting": 2,
+   "num_leaves": 31,
+   "learning_rate": 0.05,
+   "n_estimators": 400,
+   "min_child_samples": 50,
+   "pinball": 592.9882216213288,
+   "runtime_s": 95.5
+  },
+  {
+   "setting": 3,
+   "num_leaves": 31,
+   "learning_rate": 0.1,
+   "n_estimators": 200,
+   "min_child_samples": 50,
+   "pinball": 591.041121583232,
+   "runtime_s": 51.1
+  },
+  {
+   "setting": 4,
+   "num_leaves": 63,
+   "learning_rate": 0.05,
+   "n_estimators": 400,
+   "min_child_samples": 100,
+   "pinball": 595.082642642432,
+   "runtime_s": 148.7
+  },
+  {
+   "setting": 5,
+   "num_leaves": 63,
+   "learning_rate": 0.1,
+   "n_estimators": 200,
+   "min_child_samples": 100,
+   "pinball": 590.9965211323187,
+   "runtime_s": 78.0
+  },
+  {
+   "setting": 6,
+   "num_leaves": 31,
+   "learning_rate": 0.03,
+   "n_estimators": 700,
+   "min_child_samples": 50,
+   "pinball": 593.7086126731775,
+   "runtime_s": 161.3
+  },
+  {
+   "setting": 7,
+   "num_leaves": 31,
+   "learning_rate": 0.05,
+   "n_estimators": 400,
+   "min_child_samples": 20,
+   "pinball": 594.301602222259,
+   "runtime_s": 95.8
+  },
+  {
+   "setting": 8,
+   "num_leaves": 63,
+   "learning_rate": 0.05,
+   "n_estimators": 600,
+   "min_child_samples": 50,
+   "pinball": 597.2631614129679,
+   "runtime_s": 219.4
+  },
+  {
+   "setting": 9,
+   "num_leaves": 127,
+   "learning_rate": 0.05,
+   "n_estimators": 400,
+   "min_child_samples": 100,
+   "pinball": 599.9492088378928,
+   "runtime_s": 241.2
+  },
+  {
+   "setting": 10,
+   "num_leaves": 15,
+   "learning_rate": 0.1,
+   "n_estimators": 600,
+   "min_child_samples": 20,
+   "pinball": 591.4436317121861,
+   "runtime_s": 92.0
+  },
+  {
+   "setting": 11,
+   "num_leaves": 31,
+   "learning_rate": 0.1,
+   "n_estimators": 400,
+   "min_child_samples": 50,
+   "pinball": 591.3241048601167,
+   "runtime_s": 92.4
+  }
+ ],
+ "best": {
+  "setting": 5,
+  "num_leaves": 63,
+  "learning_rate": 0.1,
+  "n_estimators": 200,
+  "min_child_samples": 100,
+  "pinball": 590.9965211323187,
+  "runtime_s": 78.0
+ },
+ "git_sha": "9922a2007217697e1444d10790fade62e19d572f",
+ "git_dirty": false,
+ "store_hash": "5a0c9ddb2597823fb53b28cda64c9e8cadd1a2e91a21f1991e13c1c202d1488d"
+}

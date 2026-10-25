@@ -1,0 +1,66 @@
+{
+ "run_id": "val-v1",
+ "command": "lastprog backtest --run-id val-v1 --period validation",
+ "period": [
+  "2023-10-01",
+  "2024-09-30"
+ ],
+ "models": [
+  "naive_week",
+  "naive_day",
+  "mstl_ets",
+  "lgbm_qr",
+  "lgbm_cqr",
+  "lgbm_cqr_dp",
+  "lgbm_aci",
+  "tso_reference"
+ ],
+ "cutoff_rule": "local_midnight_of_issue_day",
+ "git_sha": "9922a2007217697e1444d10790fade62e19d572f",
+ "git_dirty": false,
+ "protocol_v1": null,
+ "config_hash": "bbb0a6d363bf458b5db2e4b4094021e8b6d036592b9ee71b141bd44f89c2a5a3",
+ "store_hash": "5a0c9ddb2597823fb53b28cda64c9e8cadd1a2e91a21f1991e13c1c202d1488d",
+ "seed": 20261025,
+ "num_threads": 4,
+ "lgbm": {
+  "n_estimators": 400,
+  "learning_rate": 0.05,
+  "num_leaves": 31,
+  "min_child_samples": 50,
+  "feature_fraction": 0.9,
+  "lambda_l2": 1.0
+ },
+ "fits": {
+  "lgbm_qr": [
+   "2023-08-05",
+   "2023-09-01",
+   "2023-10-01",
+   "2023-11-01",
+   "2023-12-01",
+   "2024-01-01",
+   "2024-02-01",
+   "2024-03-01",
+   "2024-04-01",
+   "2024-05-01",
+   "2024-06-01",
+   "2024-07-01",
+   "2024-08-01",
+   "2024-09-01"
+  ],
+  "mstl_ets": [],
+  "naive_day": [],
+  "naive_week": [],
+  "tso_reference": []
+ },
+ "runtime_s": 241.5,
+ "versions": {
+  "python": "3.13.11",
+  "lightgbm": "4.7.0",
+  "statsforecast": "2.1.1",
+  "numpy": "2.4.6",
+  "pandas": "2.3.3",
+  "holidays": "0.107",
+  "scipy": "1.18.1"
+ }
+}
