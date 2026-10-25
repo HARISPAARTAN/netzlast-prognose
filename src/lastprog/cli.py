@@ -151,3 +151,15 @@ def publish_results(run_id: str = typer.Option(..., "--run-id")) -> None:
     run = json.loads((dst / "run.json").read_text(encoding="utf-8"))
     (dst / "results.md").write_text(results_markdown(summary, run), encoding="utf-8")
     typer.echo(str(dst))
+
+
+@app.command()
+def tune() -> None:
+    """Grid of 12 LightGBM settings on the validation year; writes docs/results/tuning-v1.json."""
+    from .pipeline import load_store
+    from .tuning import tune as run_tune
+
+    _setup_logging()
+    s = _settings()
+    out = run_tune(s, load_store(s), s.paths.results / "tuning-v1.json")
+    typer.echo(json.dumps(out["best"]))
