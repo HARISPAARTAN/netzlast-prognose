@@ -7,11 +7,22 @@
   "missing_hours_before_cutoff": 0,
   "model_version": "2026.10.0",
   "git_sha": "61d45ab6823cb095d512a18830f966e493679ba4",
+  "psi_window_days": 365,
   "psi": {
-   "lag_d1": 0.2603,
-   "lag_d6": 0.3937,
-   "d1_mean": 2.0551,
-   "d7_mean": 5.1113
+   "lag_d1": 0.0083,
+   "lag_d6": 0.0082,
+   "d1_mean": 0.0249,
+   "d7_mean": 0.1145
+  },
+  "psi_superseded": {
+   "window_days": 28,
+   "psi": {
+    "lag_d1": 0.2603,
+    "lag_d6": 0.3937,
+    "d1_mean": 2.0551,
+    "d7_mean": 5.1113
+   },
+   "note": "Recomputed on 2026-10-25 after the review: a 28-day window alerts permanently because the load level follows the season. Forecast and scores are unchanged. See docs/live-log.md in the main branch."
   },
   "errors": {}
  },
