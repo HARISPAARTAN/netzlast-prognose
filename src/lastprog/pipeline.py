@@ -18,13 +18,42 @@ from .evaluation import exclusion_counts, per_origin, score_points, summarise
 from .store import Store
 
 
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+
+
 def git_sha(root: Path) -> str:
     try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
+        out = _git(root, "rev-parse", "HEAD")
+    except OSError:
         return "unknown"
+    return out.stdout.strip() if out.returncode == 0 else "unknown"
+
+
+def git_dirty(root: Path) -> bool | None:
+    """True when the working tree has uncommitted or untracked (not ignored) changes, None if unknown."""
+    try:
+        out = _git(root, "status", "--porcelain")
+    except OSError:
+        return None
+    return bool(out.stdout.strip()) if out.returncode == 0 else None
+
+
+PROTOCOL_TAG = "protocol-v1"
+
+
+def protocol_tag_status(root: Path, tag: str = PROTOCOL_TAG) -> tuple[bool, str]:
+    """(ok, reason): the tag exists and its commit is an ancestor of (or equal to) HEAD."""
+    try:
+        found = _git(root, "rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{commit}}")
+        if found.returncode != 0:
+            return False, f"tag {tag} does not exist"
+        ancestor = _git(root, "merge-base", "--is-ancestor", found.stdout.strip(), "HEAD")
+    except OSError as exc:
+        return False, f"git is not available ({exc})"
+    if ancestor.returncode != 0:
+        return False, f"tag {tag} does not point at an ancestor of HEAD"
+    return True, f"tag {tag} at {found.stdout.strip()[:10]}"
 
 
 PERIODS = ("fixtures", "validation", "test")
@@ -65,6 +94,7 @@ def execute_backtest(
     cutoff_rule: str | None = None,
     out_root: Path | None = None,
     progress: bool = True,
+    protocol_v1: bool | None = None,
 ) -> dict:
     """Run, score and save runs/<run_id>/{forecasts,metrics,points}.parquet, summary.json and run.json."""
     first, last = period_bounds(settings, period)
@@ -92,6 +122,8 @@ def execute_backtest(
         "models": models,
         "cutoff_rule": result.cutoff_rule,
         "git_sha": git_sha(settings.root),
+        "git_dirty": git_dirty(settings.root),
+        "protocol_v1": protocol_v1,
         "config_hash": hashlib.sha256(config_bytes).hexdigest(),
         "store_hash": store.snapshot(),
         "seed": settings.model.seed,

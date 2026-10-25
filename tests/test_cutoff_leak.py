@@ -37,6 +37,28 @@ def test_forecasts_and_conformal_window_are_bit_identical(fx_settings, fx_store)
             np.testing.assert_array_equal(q, q_b, err_msg=f"{model} {origin}")
 
 
+def test_model_fit_at_a_month_start_origin_does_not_see_day_d(fx_settings, fx_store):
+    """Single origin 2025-11-01: LightGBM is (re)fitted there. A sentinel at and after its cut-off must not
+    change forecasts, so the training rows may not reach into day D (Task 4 review I-1)."""
+    origin = date(2025, 11, 1)
+    masked = fx_store.with_observations_masked(cutoff_utc(origin), SENTINEL)
+    models = ["lgbm_qr", "lgbm_cqr"]
+    a = run_backtest(fx_settings, fx_store, origin, origin, models)
+    b = run_backtest(fx_settings, masked, origin, origin, models)
+    assert a.fits["lgbm_qr"] == ["2025-10-24", "2025-11-01"]  # warm-up fit plus the month-start refit
+    for model in models:
+        np.testing.assert_array_equal(a.outputs[model][origin][1], b.outputs[model][origin][1], err_msg=model)
+
+
+def test_model_fit_at_the_first_origin_of_a_run_does_not_see_day_d(fx_settings, fx_store):
+    origin = date(2025, 10, 25)
+    masked = fx_store.with_observations_masked(cutoff_utc(origin), SENTINEL)
+    a = run_backtest(fx_settings, fx_store, origin, origin, ["lgbm_qr"])
+    b = run_backtest(fx_settings, masked, origin, origin, ["lgbm_qr"])
+    assert a.fits["lgbm_qr"] == [origin.isoformat()]
+    np.testing.assert_array_equal(a.outputs["lgbm_qr"][origin][1], b.outputs["lgbm_qr"][origin][1])
+
+
 def test_sentinel_would_be_detected(fx_settings, fx_store):
     """Control: masking one hour *before* the cut-off must change the forecast, or the test proves nothing."""
     last = date(2025, 11, 4)

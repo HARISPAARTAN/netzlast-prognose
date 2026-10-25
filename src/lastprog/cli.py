@@ -84,17 +84,49 @@ def backtest(
     write_golden: bool = typer.Option(
         False, "--write-golden", help="fixtures only: rewrite golden_metrics.json"
     ),
+    allow_unprotocolled: bool = typer.Option(
+        False,
+        "--allow-unprotocolled",
+        help="test period only: run although tag protocol-v1 is missing or not an ancestor of HEAD; "
+        "the run is logged and marked protocol_v1=false",
+    ),
 ) -> None:
     """Rolling-origin backtest; writes runs/<run_id>/."""
-    from .pipeline import PERIODS, default_models, execute_backtest, load_store
+    from .pipeline import (
+        PERIODS,
+        PROTOCOL_TAG,
+        default_models,
+        execute_backtest,
+        load_store,
+        protocol_tag_status,
+    )
 
     if period not in PERIODS:
         raise typer.BadParameter(f"period must be one of {PERIODS}")
     if write_golden and period != "fixtures":
         raise typer.BadParameter("--write-golden needs --period fixtures")
     s = _settings(period)
+    protocol_v1: bool | None = None
+    if period == "test":
+        _setup_logging()
+        ok, reason = protocol_tag_status(s.root)
+        if ok:
+            protocol_v1 = True
+        elif allow_unprotocolled:
+            protocol_v1 = False
+            logging.getLogger("lastprog").warning(
+                "protocol guard overridden (%s): run %s is NOT a protocol run", reason, run_id
+            )
+            typer.echo(f"warning: {reason}; run {run_id} is marked protocol_v1=false", err=True)
+        else:
+            typer.echo(
+                f"error: refusing to score the test period: {reason}. "
+                f"Tag {PROTOCOL_TAG} before the first test run, or pass --allow-unprotocolled.",
+                err=True,
+            )
+            raise typer.Exit(2)
     chosen = models.split(",") if models else default_models(period)
-    out = execute_backtest(s, load_store(s), run_id, period, chosen, cutoff_rule)
+    out = execute_backtest(s, load_store(s), run_id, period, chosen, cutoff_rule, protocol_v1=protocol_v1)
     for name, m in out["summary"]["models"].items():
         typer.echo(f"{name:15s} crps={m['crps']:10.2f} cov80={m['cov_80']:.3f} cov90={m['cov_90']:.3f}")
     typer.echo(f"runtime {out['run']['runtime_s']} s -> {out['run_dir']}")

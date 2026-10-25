@@ -273,13 +273,18 @@ def results_markdown(summary: dict, run: dict) -> str:
         f"### Run `{run['run_id']}`",
         "",
         f"Command: `{run['command']}`  ",
-        f"Git SHA: `{run['git_sha']}` · store snapshot: `{run['store_hash']}` · config: `{run['config_hash'][:16]}` · "
+        f"Git SHA: `{run['git_sha']}`{' (uncommitted changes)' if run.get('git_dirty') else ''} · store snapshot: `{run['store_hash']}` · config: `{run['config_hash'][:16]}` · "
         f"runtime: {run['runtime_s']:.0f} s · seed {run['seed']} · origins {run['period'][0]} to {run['period'][1]} "
         f"· cut-off rule `{run['cutoff_rule']}`",
         "",
         "| model | " + " | ".join(cols) + " | n_origins |",
         "|---|" + "---:|" * (len(cols) + 1),
     ]
+    if run.get("protocol_v1") is False:
+        lines[1:1] = [
+            "",
+            "**Not a protocol run:** scored without the `protocol-v1` tag (guard overridden); do not cite.",
+        ]
     for m in TABLE_MODELS:
         if m in summary["models"]:
             v = summary["models"][m]
