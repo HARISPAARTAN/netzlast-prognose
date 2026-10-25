@@ -89,10 +89,11 @@ def test_models_report_provenance_and_label_the_backtest_figures(client):
         assert "not an evaluation of this" in m["test_metrics"]["note"]
 
 
-def test_degraded_health_is_a_503(fx_settings, fx_store, demo_model_dir):
+def test_degraded_health_is_a_503(client, fx_settings, fx_store, demo_model_dir):
     """Full mode on the 2025 fixture store: the newest load value is far older than 48 h."""
     stale = Forecaster(replace(fx_settings, mode="full"), fx_store, demo_model_dir)
     empty = Forecaster(replace(fx_settings, mode="demo"), fx_store, None)
+    shared = app.dependency_overrides[get_forecaster]
     try:
         for fc, problem in ((stale, "h old"), (empty, "no model loaded")):
             app.dependency_overrides[get_forecaster] = lambda fc=fc: fc
@@ -100,7 +101,7 @@ def test_degraded_health_is_a_503(fx_settings, fx_store, demo_model_dir):
             assert r.status_code == 503 and r.json()["status"] == "degraded"
             assert any(problem in p for p in r.json()["problems"])
     finally:
-        app.dependency_overrides.clear()
+        app.dependency_overrides[get_forecaster] = shared
 
 
 def test_models_and_no_model(client, fx_settings, fx_store):
