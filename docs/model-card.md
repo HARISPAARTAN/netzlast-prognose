@@ -1,6 +1,6 @@
 # Model Card: lgbm_cqr (Netzlast-Prognose)
 
-Status: Entwurf aus dem Backtest test-v1; Abschnitt "Betrieb" folgt mit Version 0.1.0.
+Status: Version 0.1.0 (ausgeliefertes Modell 2026.10.0).
 
 ## Modelldetails
 
@@ -58,6 +58,25 @@ vor der Auswertung eingefroren (`protocol-v1`).
   (Vintage) sind unbekannt. Die Quantile dieser Referenz (`tso_reference`) sind unsere eigene Konstruktion aus den
   Residuen der letzten 56 Tage, keine Prognose der Netzbetreiber.
 - Der CRPS ist die Gitternäherung aus 19 Quantilen (siehe `docs/backtest.md`).
+- Das Wettermodell `lgbm_cqr_wx` ist nur im Backtest vorhanden. Sein Vorteil (CRPS 1,118.3 gegen 1,201.8 ohne Wetter,
+  -6.9 %) ist ein Teilzeitraum-Ergebnis auf 638 Ursprüngen ab 2025-01-01; im Live-Betrieb wird kein Wetter verwendet.
+- Die Zahlen von test-v1 beschreiben das Verfahren der monatlichen Neuschätzung, jeder Monat bewertet vom davor
+  trainierten Modell, nicht das ausgelieferte Modell.
+
+## Betrieb
+
+- Ausgeliefertes Modell: Version 2026.10.0, trainiert bis 2026-09-30T22:00:00Z (`trained_until` im Manifest),
+  Manifest in `models/2026.10.0/manifest.json`, Modelldateien als Release-Asset `models` (Vorabversion; Version
+  2026.10.0 wurde einmal vor dem ersten Live-Eintrag ersetzt, seitdem wird kein Asset mehr ersetzt); Herkunft jeder Version in `models/refit-log.csv`.
+- Dienst: FastAPI (`/health`, `/forecast`, `/models`), Docker-Image `ghcr.io/harispaartan/netzlast-prognose:0.1.0`;
+  Demo-Modus mit dem Fixture-Zeitraum, voller Modus mit eingebundenem Datenverzeichnis.
+- Live: täglicher Lauf 07:00 UTC seit 2026-10-25, Protokoll auf dem Branch `forecast-log` (Format:
+  `docs/live-log.md`), monatliche Neuschätzung am 1. des Monats.
+- Überwachung: Datenalter in `/health` (Status `degraded` ab 48 Stunden), PSI der Lag-Merkmale über die letzten 365
+  Tage gegen das Trainingsfenster (Warnung über 0.2; der erste Eintrag wurde mit 28 Tagen geschrieben und neu
+  berechnet), rollierender 28-Tage-CRPS und Abdeckung auf der Live-Seite.
+- Live-Metriken: keine, bis 56 Tage bewertet sind (der Betrieb begann am 2026-10-25). Bis dahin zeigt die Seite nur
+  die Anzahl bewerteter Tage.
 
 ## Herkunft der ausgelieferten Gewichte
 

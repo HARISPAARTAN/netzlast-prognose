@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" role="img" aria-labelledby="title desc" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <title id="title">Netzlast-Prognose architecture</title>
+  <desc id="desc">Five layers from left to right: ingest, features, models, evaluation, serving. Data flows from SMARD and Open-Meteo JSON into a Parquet store, through features cut off at local midnight, into quantile models, then into the backtest report, the FastAPI service, the daily forecast log and the plots page.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#F2A93B"/>
+    </marker>
+  </defs>
+  <rect width="960" height="400" fill="#0B0F14"/>
+  <text x="24" y="36" fill="#E6EDF3" font-size="20" font-weight="600">Netzlast-Prognose</text>
+  <text x="24" y="58" fill="#8B949E" font-size="13">Day-ahead quantile forecasts of German hourly grid load, issued 07:00 UTC for the next local day</text>
+
+  <g font-size="12" fill="#E6EDF3">
+    <rect x="24" y="84" width="168" height="200" rx="8" fill="#11161d" stroke="#2A323C"/>
+    <text x="40" y="108" fill="#F2A93B" font-size="13" font-weight="600">1 Ingest</text>
+    <text x="40" y="132">SMARD 410 load</text>
+    <text x="40" y="150">SMARD 411 TSO forecast</text>
+    <text x="40" y="168">Open-Meteo Previous</text>
+    <text x="40" y="186">Runs (backtest only)</text>
+    <text x="40" y="214" fill="#8B949E">data/raw JSON cache</text>
+    <text x="40" y="232" fill="#8B949E">data/store Parquet</text>
+    <text x="40" y="262" fill="#8B949E">1 request per second</text>
+
+    <rect x="214" y="84" width="168" height="200" rx="8" fill="#11161d" stroke="#2A323C"/>
+    <text x="230" y="108" fill="#F2A93B" font-size="13" font-weight="600">2 Features</text>
+    <text x="230" y="132">Calendar, DST, Christmas</text>
+    <text x="230" y="150">Holidays weighted by</text>
+    <text x="230" y="168">Land population</text>
+    <text x="230" y="186">Load lags D-1 to D-13</text>
+    <text x="230" y="214" fill="#8B949E">Only rows before the</text>
+    <text x="230" y="232" fill="#8B949E">cut-off: 00:00 Berlin</text>
+    <text x="230" y="250" fill="#8B949E">on the issue day</text>
+
+    <rect x="404" y="84" width="168" height="200" rx="8" fill="#11161d" stroke="#2A323C"/>
+    <text x="420" y="108" fill="#F2A93B" font-size="13" font-weight="600">3 Models</text>
+    <text x="420" y="132">naive_week, naive_day</text>
+    <text x="420" y="150">mstl_ets</text>
+    <text x="420" y="168">lgbm_qr: 19 quantiles</text>
+    <text x="420" y="186">lgbm_cqr: + conformal</text>
+    <text x="420" y="204">calibration (headline)</text>
+    <text x="420" y="232" fill="#8B949E">Monthly refit, 3-year</text>
+    <text x="420" y="250" fill="#8B949E">window, fixed seed</text>
+
+    <rect x="594" y="84" width="168" height="200" rx="8" fill="#11161d" stroke="#2A323C"/>
+    <text x="610" y="108" fill="#F2A93B" font-size="13" font-weight="600">4 Evaluation</text>
+    <text x="610" y="132">Rolling origins, daily</text>
+    <text x="610" y="150">CRPS, pinball, coverage</text>
+    <text x="610" y="168">Winkler, PIT, slices</text>
+    <text x="610" y="186">Diebold-Mariano (HLN)</text>
+    <text x="610" y="214" fill="#8B949E">Protocol tagged</text>
+    <text x="610" y="232" fill="#8B949E">protocol-v1 before</text>
+    <text x="610" y="250" fill="#8B949E">the test period</text>
+
+    <rect x="784" y="84" width="152" height="200" rx="8" fill="#11161d" stroke="#2A323C"/>
+    <text x="800" y="108" fill="#F2A93B" font-size="13" font-weight="600">5 Serving</text>
+    <text x="800" y="132">FastAPI /forecast</text>
+    <text x="800" y="150">Docker image (GHCR)</text>
+    <text x="800" y="168">Daily live job</text>
+    <text x="800" y="186">Monthly refit job</text>
+    <text x="800" y="214" fill="#8B949E">PSI drift check</text>
+    <text x="800" y="232" fill="#8B949E">Data age in /health</text>
+  </g>
+
+  <g stroke="#F2A93B" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <line x1="192" y1="184" x2="212" y2="184"/>
+    <line x1="382" y1="184" x2="402" y2="184"/>
+    <line x1="572" y1="184" x2="592" y2="184"/>
+    <line x1="762" y1="184" x2="782" y2="184"/>
+    <path d="M678,284 V318"/>
+    <path d="M860,284 V318"/>
+  </g>
+
+  <g font-size="12">
+    <rect x="594" y="322" width="168" height="54" rx="8" fill="#0B0F14" stroke="#F2A93B"/>
+    <text x="610" y="344" fill="#E6EDF3">docs/backtest.md</text>
+    <text x="610" y="362" fill="#8B949E">run id, git SHA, data hash</text>
+    <rect x="784" y="322" width="152" height="54" rx="8" fill="#0B0F14" stroke="#F2A93B"/>
+    <text x="800" y="344" fill="#E6EDF3">forecast-log branch</text>
+    <text x="800" y="362" fill="#8B949E">GitHub Pages site</text>
+    <text x="24" y="344" fill="#8B949E">Data: Bundesnetzagentur | SMARD.de (CC BY 4.0)</text>
+    <text x="24" y="362" fill="#8B949E">Weather data by Open-Meteo.com (CC BY 4.0), backtest variant only</text>
+  </g>
+</svg>
