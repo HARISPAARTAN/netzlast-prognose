@@ -42,3 +42,11 @@ Wert von Filter 410 wurde im Diagramm nicht gegengelesen.
   sind Summen der vier Viertelstunden. Fehlende Werte sind `null` und bleiben im Store `NaN`, nie 0.
 - 411 wird vorab veröffentlicht: der neueste 411-Wert liegt am Ende des laufenden lokalen Tages, der neueste
   410-Wert etwa zwei Stunden vor dem Abruf. Der Live-Job protokolliert die Verzögerung in `freshness.csv`.
+- Vollabruf seit 2018-01-01 (Abruf am 2026-10-25, 06:44 bis 07:01 UTC): 922 HTTP-Aufrufe (2 Indexabrufe und 920
+  Chunks, je 460 für 410 und 411) in rund 16,5 Minuten, Rohcache 7,5 MB in 920 Dateien, `observations.parquet`
+  1,8 MB mit 154.560 Zeilen. Last (410): 77.263 Werte von 2017-12-31 23:00 UTC bis 2026-10-25 05:00 UTC, keine
+  Lücken; die 17 Nullwerte am Ende liegen in der Zukunft (laufende Woche) und bleiben `NaN`. Referenz (411): 77.256
+  Werte bis 2026-10-25 22:00 UTC, 24 fehlende Stunden.
+- Wetter: 8 Aufrufe (eine Stadt je Aufruf, 2024-01-01 bis 2026-09-30), Rohcache 5,9 MB, `weather.parquet` 1,4 MB,
+  385.536 Zeilen (8 Städte, 2 Variablen, 2024-01-01 00:00 bis 2026-09-30 23:00 UTC), 1,94 % fehlende Werte (vor dem
+  Datenbeginn am 2024-01-20).
