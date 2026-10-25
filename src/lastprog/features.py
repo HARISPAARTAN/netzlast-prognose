@@ -7,9 +7,24 @@ ts_utc < cutoff and weather values of the configured lead offset (two days). The
 Weather timestamp convention (see docs/data-notes.md): the load row stamped t covers [t, t+1 h). Instantaneous
 weather variables (temperature_2m) are the value AT the stamp, so the load hour t uses the weather stamped t.
 shortwave_radiation is the MEAN OF THE PRECEDING HOUR, so the load hour [t, t+1 h) uses the radiation stamped
-t+1 h (a shift of one hour, `RADIATION_SHIFT`). With the two-day `_previous_day2` offset the run behind the
-value stamped t+1 h is 48 h older, which is at most the cut-off (local midnight of the issue day) plus one
-hour on the 25-hour autumn day; no run issued after the cut-off enters a 24-hour or 23-hour day.
+t+1 h (a shift of one hour, `RADIATION_SHIFT`). With the two-day `_previous_day2` offset the run behind a value
+stamped s is the one 48 h older (s - 48 h), so the run behind the last radiation value of a target day is
+(last load hour + 1 h) - 48 h. Measured against the nominal cut-off (local midnight of the issue day D) this is
+exactly the cut-off on an ordinary day, one hour before it when D or D+1 is the 23-hour day, and ONE HOUR AFTER it on
+the two target days per autumn for which D or D+1 is the 25-hour day (the 25-hour day itself and the day after it:
+mid(D+2) - mid(D) is 49 h there); one hourly radiation value each. Temperature never exceeds the cut-off (0 h at
+most). This is a one-hour overrun of the nominal rule, not a leak of information: the product is issued at 07:00 UTC,
+8 to 9 h after the cut-off, so a run initialised within an hour of the cut-off is public when the forecast
+is made. No change of offset or feature is needed;
+tests/test_features_holidays.py::test_weather_run_overrun_is_bounded pins the bound.
+
+Cut-off rules. Under the default `local_midnight_of_issue_day` the days D-1 ... D-14 are complete. Under the
+sensitivity rule `noon_of_previous_day` the cut-off is 12:00 of D-1, so day D-1 is only half observed (local hours
+00 to 11): `lag_d1` (the same hour on D-1) is NaN for the target hours 12 to 23, and `d1_mean`, `d1_max`, `d7_mean`
+and `ratio_d1_d8` are computed from that half day (the mean and maximum of 12 hours, `ratio_d1_d8` compares it with
+the full day D-8). They do not raise and are not NaN, but they change meaning; models trained and evaluated under
+that rule see the same half-day statistics consistently, and the sensitivity run is read as a comparison of rules,
+not of feature sets (docs/data-notes.md).
 """
 
 from __future__ import annotations

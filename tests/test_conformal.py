@@ -1,7 +1,15 @@
 import numpy as np
+import pytest
 from scipy.stats import norm
 
-from lastprog.models.conformal import AdaptiveConformal, cqr_adjust, pairs, score_quantile
+from lastprog.models.conformal import (
+    AdaptiveConformal,
+    cqr_adjust,
+    cqr_adjust_counted,
+    pairs,
+    score_quantile,
+    unadjusted_rows,
+)
 
 TAUS = np.round(np.arange(1, 20) * 0.05, 2)
 
@@ -57,3 +65,39 @@ def test_aci_moves_alpha_towards_nominal():
     before = aci.alpha[0]
     aci.update(q, y)
     assert aci.alpha[0] < before  # misses -> smaller alpha -> wider intervals
+
+
+# Empty or unusable windows give explicit NaN rows and a count (Task 3 fix report, review I-2).
+
+
+def test_empty_window_is_all_nan_and_counted():
+    raw = _base_grid(3, 1.0)
+    out, n = cqr_adjust_counted(raw, np.empty((0, 19)), np.empty(0), TAUS)
+    assert np.isnan(out).all() and n == 3 and unadjusted_rows(out) == 3
+    ok, n_ok = cqr_adjust_counted(
+        raw, _base_grid(50, 0.5), np.random.default_rng(3).standard_normal(50), TAUS
+    )
+    assert not np.isnan(ok).any() and n_ok == 0
+
+
+def test_all_nan_outcomes_give_all_nan_rows_including_the_median():
+    out, n = cqr_adjust_counted(_base_grid(2, 1.0), _base_grid(10, 1.0), np.full(10, np.nan), TAUS)
+    assert np.isnan(out).all() and n == 2
+
+
+def test_group_without_history_is_all_nan_for_that_group_only():
+    rng = np.random.default_rng(5)
+    raw, hist, y = _base_grid(4, 1.0), _base_grid(30, 1.0), rng.standard_normal(30)
+    out, n = cqr_adjust_counted(raw, hist, y, TAUS, np.array([0, 0, 1, 1]), np.zeros(30, dtype=int))
+    assert n == 2 and np.isnan(out[2:]).all() and not np.isnan(out[:2]).any()
+
+
+def test_groups_need_groups_hist():
+    with pytest.raises(ValueError, match="together"):
+        cqr_adjust(_base_grid(2, 1.0), _base_grid(5, 1.0), np.zeros(5), TAUS, np.array([0, 1]), None)
+
+
+def test_aci_adjust_on_empty_window_is_all_nan():
+    aci = AdaptiveConformal(TAUS, gamma=0.05)
+    out = aci.adjust(_base_grid(2, 1.0), np.empty((0, 19)), np.empty(0))
+    assert np.isnan(out).all() and unadjusted_rows(out) == 2

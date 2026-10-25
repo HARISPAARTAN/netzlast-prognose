@@ -7,12 +7,14 @@ import pytest
 from lastprog.features import (
     CALENDAR_FEATURES,
     LAG_FEATURES,
+    RADIATION_SHIFT,
     FeatureSpec,
     HolidayCalendar,
     build_features,
     city_weights_from_seed,
 )
-from lastprog.timekeys import cutoff_utc, day_index
+from lastprog.store import OBS_COLUMNS, Store
+from lastprog.timekeys import cutoff_utc, daterange, day_index, hours_in_day
 
 
 @pytest.fixture(scope="module")
@@ -181,3 +183,185 @@ def test_weather_features_nan_when_weather_missing(fx_store, calendar):
     spec = FeatureSpec(calendar=calendar, with_weather=True, city_weights={"A": 0.5, "B": 0.5})
     f = build_features(store, date(2025, 10, 28), cutoff_utc(date(2025, 10, 27)), spec)
     assert f["wx_temp"].isna().all() and f["wx_ssr"].isna().all()
+
+
+# Lag values pinned against independently built expectations (Task 3 fix report, review I-1).
+
+
+def _day(load: pd.Series, d: date) -> np.ndarray:
+    """The load values of local day `d` in UTC order (23, 24 or 25 values)."""
+    return load.reindex(day_index(d)).to_numpy("float64")
+
+
+def _synthetic_store(fx_store, start: str, end: str) -> Store:
+    """Hourly load for a stretch without the fixture's data: value = hours since `start`, unique per hour,
+    so the instant that a lag read can be recovered from the value."""
+    idx = pd.date_range(start, end, freq="h", tz="UTC", name="ts_utc")
+    obs = pd.DataFrame(
+        {
+            "series": "load_actual",
+            "filter_id": 410,
+            "region": "DE",
+            "ts_utc": idx,
+            "value": np.arange(len(idx), dtype="float64") + 1000.0,
+            "chunk_ts_ms": 0,
+            "fetched_at_utc": pd.Timestamp("2025-11-10T12:00:00Z"),
+        }
+    )[OBS_COLUMNS]
+    return Store(observations=obs, weather=fx_store.weather, region="DE")
+
+
+def _lags(store, calendar, target: date) -> pd.DataFrame:
+    return build_features(store, target, cutoff_utc(target - timedelta(days=1)), FeatureSpec(calendar))
+
+
+def test_all_four_lags_and_aggregates_on_a_normal_day(fx_store, calendar):
+    load = fx_store.series("load_actual")
+    target = date(2025, 11, 5)  # lag days 11-03, 11-02, 10-29, 10-22 are 24-hour days
+    f = _lags(fx_store, calendar, target)
+    for name, days_back in (("lag_d1", 2), ("lag_d2", 3), ("lag_d6", 7), ("lag_d13", 14)):
+        expected = _day(load, target - timedelta(days=days_back))
+        assert len(expected) == 24
+        assert f[name].to_numpy() == pytest.approx(expected, abs=0), name
+    d1 = _day(load, target - timedelta(days=2))
+    d8 = _day(load, target - timedelta(days=9))
+    week = np.concatenate([_day(load, target - timedelta(days=k)) for k in range(2, 9)])
+    assert f["d1_mean"].iloc[0] == pytest.approx(d1.mean())
+    assert f["d1_max"].iloc[0] == d1.max()
+    assert f["d7_mean"].iloc[0] == pytest.approx(week.mean())
+    assert f["ratio_d1_d8"].iloc[0] == pytest.approx(d1.mean() / d8.mean())
+    # Three different numbers, so a swap or a shifted day cannot hide behind equal values.
+    assert len({f["d1_mean"].iloc[0], f["d7_mean"].iloc[0], f["ratio_d1_d8"].iloc[0]}) == 3
+
+
+def test_d7_mean_counts_every_hour_of_a_25_hour_day(fx_store, calendar):
+    load = fx_store.series("load_actual")
+    target = date(2025, 10, 28)  # D-1 .. D-7 = 10-26 (25 hours) .. 10-20
+    f = _lags(fx_store, calendar, target)
+    week = np.concatenate([_day(load, target - timedelta(days=k)) for k in range(2, 9)])
+    assert len(week) == 24 * 6 + 25
+    assert f["d7_mean"].iloc[0] == pytest.approx(week.mean())
+    d8 = _day(load, target - timedelta(days=9))
+    assert f["ratio_d1_d8"].iloc[0] == pytest.approx(_day(load, date(2025, 10, 26)).mean() / d8.mean())
+
+
+@pytest.mark.parametrize(
+    "target, name",
+    [
+        (date(2025, 10, 28), "lag_d1"),  # 2 days after the 25-hour day 2025-10-26
+        (date(2025, 10, 29), "lag_d2"),
+        (date(2025, 11, 2), "lag_d6"),
+        (date(2025, 11, 9), "lag_d13"),
+    ],
+)
+def test_lag_from_the_25_hour_day_takes_the_first_02_00(fx_store, calendar, target, name):
+    """Wall-clock rule: target 02:00 reads the FIRST (CEST) 02:00 of the 25-hour lag day, the repeated hour is
+    dropped, every later local hour reads its own stamp."""
+    load = fx_store.series("load_actual")
+    lag_day = _day(load, date(2025, 10, 26))
+    assert len(lag_day) == 25
+    expected = np.delete(lag_day, 3)  # index 3 is the second 02:00 (CET)
+    f = _lags(fx_store, calendar, target)
+    assert len(f) == 24
+    assert f[name].to_numpy() == pytest.approx(expected, abs=0)
+    assert f[name].iloc[2] == lag_day[2] != lag_day[3]
+
+
+@pytest.mark.parametrize(
+    "name, days_back, lag_day",
+    [
+        ("lag_d1", 2, date(2025, 10, 24)),
+        ("lag_d2", 3, date(2025, 10, 23)),
+        ("lag_d6", 7, date(2025, 10, 19)),
+        ("lag_d13", 14, date(2025, 10, 12)),
+    ],
+)
+def test_25_hour_target_day_reads_the_same_wall_clock_hour_twice(
+    fx_store, calendar, name, days_back, lag_day
+):
+    """Both 02:00 rows of the 25-hour target day get the lag day's 02:00 (identical features, review M-6)."""
+    load = fx_store.series("load_actual")
+    assert date(2025, 10, 26) - timedelta(days=days_back) == lag_day
+    v = _day(load, lag_day)
+    assert len(v) == 24
+    f = _lags(fx_store, calendar, date(2025, 10, 26))
+    assert len(f) == 25
+    assert f[name].to_numpy() == pytest.approx(np.insert(v, 3, v[2]), abs=0)
+
+
+@pytest.mark.parametrize(
+    "target, name",
+    [
+        (date(2025, 4, 1), "lag_d1"),  # 2 days after the 23-hour day 2025-03-30
+        (date(2025, 4, 2), "lag_d2"),
+        (date(2025, 4, 6), "lag_d6"),
+        (date(2025, 4, 13), "lag_d13"),
+    ],
+)
+def test_lag_from_the_23_hour_day_fills_the_missing_02_00_from_01_00(fx_store, calendar, target, name):
+    """Spring rule: the local hour 02:00 does not exist on the lag day, the target's 02:00 takes 01:00."""
+    store = _synthetic_store(fx_store, "2025-03-01T00:00:00Z", "2025-04-20T00:00:00Z")
+    load = store.series("load_actual")
+    lag_day = _day(load, date(2025, 3, 30))
+    assert len(lag_day) == 23
+    expected = np.insert(lag_day, 2, lag_day[1])
+    f = _lags(store, calendar, target)
+    assert len(f) == 24
+    assert not f[name].isna().any()
+    assert f[name].to_numpy() == pytest.approx(expected, abs=0)
+    assert f[name].iloc[2] == f[name].iloc[1]
+
+
+def test_23_hour_target_day_skips_the_missing_hour(fx_store, calendar):
+    store = _synthetic_store(fx_store, "2025-03-01T00:00:00Z", "2025-04-20T00:00:00Z")
+    load = store.series("load_actual")
+    f = _lags(store, calendar, date(2025, 3, 30))
+    assert len(f) == 23 and hours_in_day(date(2025, 3, 30)) == 23
+    for name, days_back in (("lag_d1", 2), ("lag_d2", 3), ("lag_d6", 7), ("lag_d13", 14)):
+        v = _day(load, date(2025, 3, 30) - timedelta(days=days_back))
+        assert len(v) == 24
+        assert f[name].to_numpy() == pytest.approx(np.delete(v, 2), abs=0), name  # no 02:00 on the target day
+
+
+def test_present_nan_hour_is_not_forward_filled(fx_store, calendar):
+    """The forward fill is only for hours that do not exist; an observed NaN stays NaN."""
+    load = fx_store.series("load_actual")
+    hole = pd.Timestamp("2025-11-03T09:00:00Z")  # 10:00 local on 11-03
+    obs = fx_store.observations.copy()
+    obs.loc[(obs["series"] == "load_actual") & (obs["ts_utc"] == hole), "value"] = np.nan
+    store = Store(observations=obs, weather=fx_store.weather, region="DE")
+    f = _lags(store, calendar, date(2025, 11, 5))
+    assert np.isnan(f["lag_d1"].iloc[10])
+    assert f["lag_d1"].iloc[9] == load.loc[pd.Timestamp("2025-11-03T08:00:00Z")]
+    assert f["lag_d1"].notna().sum() == 23
+
+
+def test_weather_run_overrun_is_bounded():
+    """Run behind the weather value of a target hour = its stamp - 48 h. Against the nominal cut-off (local
+    midnight of the issue day) radiation overruns by at most one hour, only on target days for which D or D+1 is
+    the 25-hour day, and temperature never overruns (docs/data-notes.md)."""
+    offset = pd.Timedelta(days=FeatureSpec.__dataclass_fields__["weather_offset_days"].default)
+    assert offset == pd.Timedelta(hours=48) and pd.Timedelta(hours=1) == RADIATION_SHIFT
+    overrun_days = []
+    for target in daterange(date(2024, 1, 1), date(2026, 12, 31)):
+        idx = day_index(target)
+        cutoff = cutoff_utc(target - timedelta(days=1))
+        temp_over = (idx - offset).max() - cutoff
+        ssr_over = (idx + RADIATION_SHIFT - offset).max() - cutoff
+        assert temp_over <= pd.Timedelta(0), target
+        assert ssr_over <= pd.Timedelta(hours=1), target
+        long_day = 25 in (hours_in_day(target), hours_in_day(target - timedelta(days=1)))
+        if ssr_over > pd.Timedelta(0):
+            overrun_days.append(target)
+            assert long_day, target
+        if long_day:
+            assert ssr_over == pd.Timedelta(hours=1), target
+    # Two target days per autumn (the 25-hour day and the day after it).
+    assert overrun_days == [
+        date(2024, 10, 27),
+        date(2024, 10, 28),
+        date(2025, 10, 26),
+        date(2025, 10, 27),
+        date(2026, 10, 25),
+        date(2026, 10, 26),
+    ]

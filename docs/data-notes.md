@@ -69,6 +69,26 @@ Wert von Filter 410 wurde im Diagramm nicht gegengelesen.
 - Warum zwei Tage Vorlauf (`previous_day2`) und nicht einen: Die Prognose wird um 07:00 UTC an Tag D für den
   lokalen Tag D+1 erstellt (bis etwa 40 Stunden Vorlauf), Informationsstand ist lokal Mitternacht von D. Ein
   `previous_day1`-Wert für den Abend von D+1 stammt aus einem Lauf nach diesem Stichtag und wäre ein Leck.
+- Lauf hinter dem letzten Strahlungswert (Prüfung `test_weather_run_overrun_is_bounded`): Der Lauf hinter einem
+  Wert mit Zeitstempel s ist der um 48 Stunden ältere (s - 48 h). Gegen den nominalen Stichtag (lokal Mitternacht
+  von D) liegt der Lauf hinter dem letzten Strahlungswert des Zieltags D+1 bei 0 h an einem gewöhnlichen Tag, bei
+  -1 h, wenn D oder D+1 der 23-Stunden-Tag ist, und bei +1 h, wenn D oder D+1 der 25-Stunden-Tag ist
+  (Mitternacht D+2 minus Mitternacht D = 49 h). Das sind zwei Zieltage pro Herbst, nämlich der 25-Stunden-Tag selbst
+  und der Tag danach (Testzeitraum 2024-10-27, 2024-10-28, 2025-10-26, 2025-10-27; mit Wetter ab 2025-01-01 die
+  beiden Tage 2025-10-26 und 2025-10-27), je ein stündlicher Strahlungswert. Die Temperatur überschreitet den
+  Stichtag nie (höchstens 0 h). Das ist eine Überschreitung der nominalen Regel um eine Stunde, aber kein
+  Informationsleck: Das Produkt wird um 07:00 UTC erstellt, 8 bis 9 Stunden nach dem Stichtag, ein Lauf, der höchstens
+  eine Stunde nach dem Stichtag initialisiert wurde, liegt dann vor. Der Versatz von zwei Tagen und das Merkmal
+  bleiben unverändert (ein Versatz von drei Tagen kostete Güte für 2 von rund 17.500 Werten, der Store enthält nur
+  Versatz 2). Wie Open-Meteo den Lauf für `_previous_day2` wählt (jüngster Lauf bis Gültigkeitszeit minus 48 h oder
+  fester Tageslauf), ist offline nicht geprüft; beide Varianten liegen vor 07:00 UTC. Die Zahl (höchstens +1 h, nur
+  an diesen Tagen) wird in `docs/backtest.md` genannt, sobald sie geschrieben ist.
+- Halbtag unter der Sensitivitätsregel `noon_of_previous_day`: Der Stichtag ist dann 12:00 lokal an D-1, der Tag D-1
+  ist nur zur Hälfte beobachtet (Ortszeit 00 bis 11 Uhr). `lag_d1` (gleiche Stunde an D-1) ist für die Zielstunden 12
+  bis 23 NaN. `d1_mean`, `d1_max`, `d7_mean` und `ratio_d1_d8` werden aus dem Halbtag berechnet (Mittel und Maximum
+  über 12 Stunden, `ratio_d1_d8` vergleicht ihn mit dem vollen Tag D-8); sie bleiben ohne Fehler und ohne NaN, ändern
+  aber ihre Bedeutung. Die Sensitivitätsläufe vergleichen deshalb die Regeln einschließlich dieser Halbtag-Statistik,
+  nicht nur den späteren Stichtag. Unter der Standardregel sind die Tage D-1 bis D-14 vollständig.
 - Lücke in 411: die 24 fehlenden Stunden sind der lokale Tag 2020-01-31 (2020-01-30 23:00 bis 2020-01-31 22:00 UTC).
 
 ## Abrufzeit und Reparatur

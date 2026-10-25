@@ -6,6 +6,7 @@ d_t = loss_A(t) - loss_B(t) per origin (daily CRPS). Negative mean d favours mod
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -38,6 +39,11 @@ def dm_statistic(d: np.ndarray, lag: int, h: int = 1) -> float:
     d = np.asarray(d, dtype="float64")
     d = d[~np.isnan(d)]
     n = len(d)
+    if n == 0:
+        warnings.warn(
+            "Diebold-Mariano statistic of an empty or all-NaN loss differential is NaN", stacklevel=2
+        )
+        return math.nan
     var = newey_west_variance(d, lag)
     if var <= 0:
         return math.nan

@@ -54,8 +54,12 @@ def cqr_adjust(
     """Calibrated grid for `raw` (n, k) from window forecasts `q_hist` (m, k) and outcomes `y_hist` (m,).
 
     With `groups` / `groups_hist` (e.g. day parts) each group gets its own score quantile.
-    Returns NaN rows when the window holds no usable score.
+    A row whose adjustment cannot be computed (empty window, no usable score, a group without history) is
+    returned as an all-NaN row, never as a partly adjusted or raw grid; count them with `unadjusted_rows` or
+    use `cqr_adjust_counted`, and report the count with the results.
     """
+    if (groups is None) != (groups_hist is None):
+        raise ValueError("groups and groups_hist must be given together")
     out = raw.astype("float64").copy()
     if len(q_hist) == 0:
         return np.full_like(out, np.nan)
@@ -66,9 +70,30 @@ def cqr_adjust(
         rows, hrows = groups == g, groups_hist == g
         for lo, hi, level in pairs(taus):
             qhat = score_quantile(scores(q_hist[hrows], y_hist[hrows], lo, hi), level)
+            if math.isnan(qhat):
+                out[rows] = np.nan
+                break
             out[rows, lo] = out[rows, lo] - qhat
             out[rows, hi] = out[rows, hi] + qhat
     return np.sort(out, axis=1)
+
+
+def unadjusted_rows(adjusted: np.ndarray) -> int:
+    """Number of rows of a calibrated grid that hold NaN, i.e. rows the calibration could not adjust."""
+    return int(np.isnan(adjusted).any(axis=1).sum())
+
+
+def cqr_adjust_counted(
+    raw: np.ndarray,
+    q_hist: np.ndarray,
+    y_hist: np.ndarray,
+    taus: np.ndarray,
+    groups: np.ndarray | None = None,
+    groups_hist: np.ndarray | None = None,
+) -> tuple[np.ndarray, int]:
+    """`cqr_adjust` plus the number of rows left unadjusted (all-NaN) for the caller to report."""
+    out = cqr_adjust(raw, q_hist, y_hist, taus, groups, groups_hist)
+    return out, unadjusted_rows(out)
 
 
 class AdaptiveConformal:
@@ -96,6 +121,8 @@ class AdaptiveConformal:
         out = raw.astype("float64").copy()
         for lo, hi, _level in pairs(self.taus):
             qhat = score_quantile(scores(q_hist, y_hist, lo, hi), 1.0 - self.alpha[lo])
+            if math.isnan(qhat):  # empty window: all-NaN rows, as in cqr_adjust (count with unadjusted_rows)
+                return np.full_like(out, np.nan)
             out[:, lo] -= qhat
             out[:, hi] += qhat
         return np.sort(out, axis=1)

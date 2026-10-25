@@ -38,17 +38,29 @@ def winkler(y: np.ndarray, lo: np.ndarray, hi: np.ndarray, level: float) -> np.n
     return (hi - lo) + (2.0 / alpha) * np.maximum(lo - y, 0.0) + (2.0 / alpha) * np.maximum(y - hi, 0.0)
 
 
+def missing_rows(y: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """True where the target is NaN or any quantile of the row is NaN: such a row cannot be scored."""
+    return np.isnan(y) | np.isnan(q).any(axis=1)
+
+
 def pit_bin(y: np.ndarray, q: np.ndarray) -> np.ndarray:
-    """Rank of y in its quantile grid: number of quantiles strictly below y (0..k).
+    """Rank of y in its quantile grid: number of quantiles strictly below y (0..k), as float; NaN for a missing row.
 
     With the 19-quantile grid every one of the 20 bins has nominal probability 0.05, so the histogram of
     these ranks is the PIT histogram, and P(y <= q_tau_j) = share of ranks <= j is the reliability curve.
     """
-    return (q < y[:, None]).sum(axis=1)
+    rank = (q < y[:, None]).sum(axis=1).astype("float64")
+    rank[missing_rows(y, q)] = np.nan
+    return rank
 
 
 def point_scores(y: np.ndarray, q: np.ndarray, taus: np.ndarray) -> dict[str, np.ndarray]:
-    """All per-point scores used by the backtest. The median is the 0.5 column of the grid."""
+    """All per-point scores used by the backtest. The median is the 0.5 column of the grid.
+
+    A row with a NaN target or a NaN quantile is missing, never a miss: every score of that row is NaN
+    (coverage and PIT bin included), so means over the scores must skip it and `summarise_scores` reports how
+    many rows were left out.
+    """
     t = np.round(taus, 4)
     med = q[:, int(np.flatnonzero(t == 0.5)[0])]
     err = y - med
@@ -68,6 +80,26 @@ def point_scores(y: np.ndarray, q: np.ndarray, taus: np.ndarray) -> dict[str, np
         out[f"cov_{key}"] = ((y >= lo) & (y <= hi)).astype("float64")
         out[f"width_{key}"] = hi - lo
         out[f"winkler_{key}"] = winkler(y, lo, hi, level)
+    bad = missing_rows(y, q)
+    for name, values in out.items():
+        values = np.asarray(values, dtype="float64").copy()
+        values[bad] = np.nan
+        out[name] = values
+    return out
+
+
+def summarise_scores(scores: dict[str, np.ndarray]) -> dict[str, float]:
+    """Mean of every score over the rows that could be scored, plus `n_rows` and `n_excluded` (missing rows).
+
+    The PIT bin is a rank, not a score to average, and is left out of the means.
+    """
+    n_rows = len(scores["pinball"])
+    excluded = int(np.isnan(scores["pinball"]).sum())
+    out: dict[str, float] = {"n_rows": float(n_rows), "n_excluded": float(excluded)}
+    for name, values in scores.items():
+        if name == "pit_bin":
+            continue
+        out[name] = float(np.nanmean(values)) if excluded < n_rows else float("nan")
     return out
 
 
