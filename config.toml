@@ -1,0 +1,85 @@
+# Netzlast-Prognose configuration. Paths are relative to this file. No secrets exist in this project.
+
+[data]
+region = "DE"
+load_filter = 410
+reference_filter = 411
+price_filter = 4169
+price_region = "DE-LU"
+resolution = "hour"
+history_start = "2018-01-01"
+smard_base_url = "https://www.smard.de/app/chart_data"
+min_request_interval_s = 1.0
+user_agent = "netzlast-prognose/0.1 (+https://github.com/HARISPAARTAN/netzlast-prognose)"
+
+[issue]
+time_utc = "07:00"
+cutoff = "local_midnight_of_issue_day"
+days_ahead = [1]
+
+[backtest]
+validation = ["2023-10-01", "2024-09-30"]
+test = ["2024-10-01", "2026-09-30"]
+weather_test_start = "2025-01-01"
+train_window_days = 1095
+refit = "monthly"
+dm_lag = 7
+residual_window_days = 56
+
+[model]
+quantiles = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50,
+             0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95]
+seed = 20261025
+num_threads = 4
+headline = "lgbm_cqr"
+
+[model.lgbm]
+n_estimators = 400
+learning_rate = 0.05
+num_leaves = 31
+min_child_samples = 50
+feature_fraction = 0.9
+lambda_l2 = 1.0
+
+[model.mstl]
+season_lengths = [24, 168]
+train_days = 56
+
+[conformal]
+window_origins = 56
+levels = [0.5, 0.8, 0.9]
+aci_gamma = 0.005
+
+[weather]
+enabled = false
+api = "previous-runs"
+base_url = "https://previous-runs-api.open-meteo.com/v1/forecast"
+offset_days = 2
+variables = ["temperature_2m", "shortwave_radiation"]
+start = "2024-01-01"
+
+# Overrides for `--period fixtures` (10 weeks of committed data, 14 scored origins).
+[fixtures]
+origins = ["2025-10-25", "2025-11-07"]
+train_window_days = 28
+residual_window_days = 7
+window_origins = 7
+mstl_train_days = 28
+num_threads = 1
+n_estimators = 60
+learning_rate = 0.1
+num_leaves = 15
+min_child_samples = 20
+feature_fraction = 0.9
+lambda_l2 = 1.0
+demo_as_of = "2025-10-25"
+
+[paths]
+raw = "data/raw"
+store = "data/store"
+runs = "runs"
+models = "models"
+fixtures = "data/fixtures"
+seed = "data/seed"
+site = "site"
+results = "docs/results"
